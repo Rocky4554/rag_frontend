@@ -2,9 +2,10 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { Bell, FileText } from "lucide-react";
+import { Bell, FileText, Menu } from "lucide-react";
 import { useSession } from "@/lib/session-context";
 import { useAuth } from "@/lib/auth-context";
+import { useSidebar } from "@/components/dashboard/Sidebar";
 
 const pageTitles = {
   "/dashboard": "Dashboard",
@@ -21,6 +22,7 @@ export default function Topbar() {
   const pathname = usePathname();
   const { activeSession } = useSession();
   const { user } = useAuth();
+  const { toggle } = useSidebar();
   const pageTitle = pageTitles[pathname] || "Dashboard";
 
   const initials = user?.name
@@ -28,16 +30,24 @@ export default function Topbar() {
     : user?.email?.[0]?.toUpperCase() || "U";
 
   return (
-    <header className="flex items-center justify-between h-16 px-6 bg-bg-card border-b border-border shrink-0">
-      {/* Breadcrumb */}
-      <div className="flex items-center gap-2 text-sm">
-        <span className="text-text-muted">Dashboard</span>
-        {pageTitle !== "Dashboard" && (
-          <>
-            <span className="text-text-muted">/</span>
-            <span className="text-text-primary font-medium">{pageTitle}</span>
-          </>
-        )}
+    <header className="flex items-center justify-between h-14 md:h-16 px-4 md:px-6 bg-bg-card border-b border-border shrink-0">
+      {/* Left: hamburger + breadcrumb */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={toggle}
+          className="md:hidden p-1.5 rounded-lg hover:bg-bg-elevated transition-colors cursor-pointer"
+        >
+          <Menu className="w-5 h-5 text-text-secondary" />
+        </button>
+        <div className="flex items-center gap-2 text-sm">
+          <span className="hidden sm:inline text-text-muted">Dashboard</span>
+          {pageTitle !== "Dashboard" && (
+            <>
+              <span className="hidden sm:inline text-text-muted">/</span>
+              <span className="text-text-primary font-medium">{pageTitle}</span>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Active document pill */}
@@ -54,7 +64,7 @@ export default function Topbar() {
       )}
 
       {/* Right actions */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2 md:gap-4">
         <button className="relative p-2 rounded-lg hover:bg-bg-elevated transition-colors">
           <Bell className="w-5 h-5 text-text-secondary" />
         </button>

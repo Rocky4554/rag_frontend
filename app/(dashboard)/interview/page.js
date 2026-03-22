@@ -100,7 +100,16 @@ export default function InterviewPage() {
       });
 
       await room.connect(tokenData.url, tokenData.token);
-      await room.localParticipant.setMicrophoneEnabled(true);
+
+      // Request mic permission — handle denial gracefully
+      try {
+        await room.localParticipant.setMicrophoneEnabled(true);
+      } catch (micErr) {
+        room.disconnect();
+        throw new Error(
+          "Microphone access denied. Please allow microphone permission in your browser settings and try again."
+        );
+      }
 
       // Signal client ready
       socket.emit("client_audio_ready", sessionId);
@@ -305,12 +314,12 @@ export default function InterviewPage() {
 
   // Active interview
   return (
-    <div className="flex gap-6 h-full -m-6 p-6">
+    <div className="flex flex-col md:flex-row gap-4 md:gap-6 h-full -m-4 md:-m-6 p-4 md:p-6 overflow-y-auto md:overflow-hidden">
       {/* Voice panel */}
       <motion.div
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
-        className="flex-1 flex flex-col items-center bg-bg-card border border-border rounded-2xl p-8"
+        className="flex-1 flex flex-col items-center bg-bg-card border border-border rounded-2xl p-6 md:p-8 min-h-[400px]"
       >
         {/* Progress */}
         <div className="w-full mb-6">
@@ -393,7 +402,7 @@ export default function InterviewPage() {
       <motion.div
         initial={{ opacity: 0, x: 20 }}
         animate={{ opacity: 1, x: 0 }}
-        className="w-[400px] flex flex-col bg-bg-card border border-border rounded-2xl shrink-0"
+        className="w-full md:w-[400px] flex flex-col bg-bg-card border border-border rounded-2xl shrink-0 max-h-[50vh] md:max-h-none"
       >
         <div className="px-5 py-4 border-b border-border">
           <h3 className="text-sm font-semibold text-text-primary">Live Transcript</h3>

@@ -124,9 +124,9 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex flex-col h-full -m-6">
+    <div className="flex flex-col h-full -m-4 md:-m-6">
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+      <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4 md:py-6 space-y-4 md:space-y-6">
         {loadingHistory ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="w-6 h-6 animate-spin text-[#7C3AED]" />
@@ -155,7 +155,7 @@ export default function ChatPage() {
 
               {/* Bubble */}
               <div
-                className={`rounded-2xl px-4 py-3 text-sm leading-relaxed max-w-[520px] ${
+                className={`rounded-2xl px-4 py-3 text-sm leading-relaxed max-w-[85vw] sm:max-w-sm md:max-w-[520px] ${
                   msg.role === "user"
                     ? "bg-gradient-to-r from-[#7C3AED] to-[#6D28D9] text-white"
                     : "bg-bg-card border border-border text-text-primary"
@@ -205,8 +205,8 @@ export default function ChatPage() {
       </div>
 
       {/* Input bar */}
-      <div className="border-t border-border bg-bg-card px-6 py-4">
-        <div className="max-w-3xl mx-auto flex items-end gap-3">
+      <div className="border-t border-border bg-bg-card px-4 md:px-6 py-3 md:py-4">
+        <div className="max-w-3xl mx-auto flex items-end gap-2 md:gap-3">
           <div className="flex-1 relative">
             <textarea
               ref={textareaRef}
