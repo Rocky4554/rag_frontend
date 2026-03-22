@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find 'E:/Personal Projects/Rag/rag-frontend/components' -name *.jsx)",
+      "Bash(find 'E:/Personal Projects/Rag/rag-frontend/app/\\(dashboard\\)' -name *.js)",
+      "Bash(ls \"E:/Personal Projects/Rag/rag-frontend/app/\\(dashboard\\)/upload/\")",
+      "Bash(ls \"E:/Personal Projects/Rag/rag-frontend/app/\\(dashboard\\)/chat/\")",
+      "Bash(ls \"E:/Personal Projects/Rag/rag-frontend/app/\\(dashboard\\)/quiz/\")",
+      "Bash(ls \"E:/Personal Projects/Rag/rag-frontend/app/\\(dashboard\\)/summary/\")",
+      "Bash(ls \"E:/Personal Projects/Rag/rag-frontend/app/\\(dashboard\\)/interview/\")",
+      "Bash(ls \"e:/Personal Projects/Rag/rag-frontend/app/\\(auth\\)/\")",
+      "Bash(ls \"e:/Personal Projects/Rag/rag-frontend/app/\\(auth\\)/login/\")",
+      "Bash(ls \"e:/Personal Projects/Rag/rag-frontend/app/\\(auth\\)/signup/\")"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "stitch"
+  ]
+}
