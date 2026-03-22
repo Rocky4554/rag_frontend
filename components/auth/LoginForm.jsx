@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Mail, Lock, Chrome, Loader2, UserCheck } from "lucide-react";
+import { Mail, Lock, Loader2, UserCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 
@@ -50,19 +50,6 @@ export default function LoginForm() {
           Sign in to continue your learning journey
         </p>
       </div>
-
-      {/* Google button */}
-      <button
-        type="button"
-        className={cn(
-          "w-full flex items-center justify-center gap-3 rounded-lg border border-border",
-          "bg-bg-card px-4 py-3 text-text-primary font-medium",
-          "hover:bg-bg-elevated transition-colors cursor-pointer"
-        )}
-      >
-        <Chrome className="h-5 w-5" />
-        Continue with Google
-      </button>
 
       {/* Demo credentials button */}
       <button
