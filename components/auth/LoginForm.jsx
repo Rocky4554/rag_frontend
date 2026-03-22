@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Mail, Lock, Chrome, Loader2 } from "lucide-react";
+import { Mail, Lock, Chrome, Loader2, UserCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 
@@ -62,6 +62,24 @@ export default function LoginForm() {
       >
         <Chrome className="h-5 w-5" />
         Continue with Google
+      </button>
+
+      {/* Demo credentials button */}
+      <button
+        type="button"
+        onClick={() => {
+          setEmail("ultimatekller45@gmail.com");
+          setPassword("Raunak@123");
+          setError("");
+        }}
+        className={cn(
+          "w-full flex items-center justify-center gap-3 rounded-lg border border-accent/30",
+          "bg-accent/10 px-4 py-3 text-accent font-medium mt-3",
+          "hover:bg-accent/20 transition-colors cursor-pointer"
+        )}
+      >
+        <UserCheck className="h-5 w-5" />
+        Use Demo Credentials
       </button>
 
       {/* Divider */}
