@@ -77,14 +77,46 @@ export default function ChatPage() {
     // Reset textarea height
     if (textareaRef.current) textareaRef.current.style.height = "auto";
 
+    const aiMsgId = Date.now() + 1;
+    setMessages((prev) => [...prev, { id: aiMsgId, role: "ai", content: "" }]);
+
     try {
-      const { data } = await chatAPI.send(sessionId, userMsg.content);
-      setMessages((prev) => [
-        ...prev,
-        { id: Date.now() + 1, role: "ai", content: data.answer },
-      ]);
+      const res = await chatAPI.sendStream(sessionId, userMsg.content);
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || "Failed to get response");
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop(); // keep incomplete line in buffer
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const json = JSON.parse(line.slice(6));
+          if (json.done) break;
+          if (json.error) throw new Error(json.error);
+          if (json.token) {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === aiMsgId ? { ...m, content: m.content + json.token } : m
+              )
+            );
+          }
+        }
+      }
     } catch (err) {
-      setError(err.response?.data?.error || "Failed to get response");
+      // Remove empty AI message on error
+      setMessages((prev) => prev.filter((m) => m.id !== aiMsgId || m.content));
+      setError(err.message || "Failed to get response");
     } finally {
       setIsLoading(false);
     }
@@ -172,13 +204,16 @@ export default function ChatPage() {
                     )}
                   </p>
                 ))}
+                {msg.role === "ai" && isLoading && msg.id === messages[messages.length - 1]?.id && (
+                  <span className="inline-block w-1.5 h-4 ml-0.5 bg-[#7C3AED] animate-pulse rounded-sm align-middle" />
+                )}
               </div>
             </motion.div>
           ))
         )}
 
-        {/* Loading indicator */}
-        {isLoading && (
+        {/* Loading indicator — shown only before first token arrives */}
+        {isLoading && messages[messages.length - 1]?.content === "" && (
           <div className="flex gap-3 max-w-3xl">
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#7C3AED] to-[#0EA5E9] flex items-center justify-center shrink-0">
               <Sparkles className="w-4 h-4 text-white" />

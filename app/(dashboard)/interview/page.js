@@ -53,15 +53,54 @@ export default function InterviewPage() {
       const socket = registerSession(sessionId);
 
       // Listen for transcript events
-      socket.on("transcript_final", (data) => {
-        setTranscript((prev) => [
-          ...prev,
-          { id: Date.now(), role: data.role, text: data.text, score: data.score },
-        ]);
-        if (data.role === "ai") {
-          setStatusText("Your turn to speak...");
+      const streamingRef = { id: null };
+
+      socket.on("ai_stream", (data) => {
+        if (!streamingRef.id) {
+          // First token — create a new transcript entry
+          streamingRef.id = Date.now();
+          setTranscript((prev) => [
+            ...prev,
+            { id: streamingRef.id, role: "ai", text: data.token, streaming: true },
+          ]);
+          setStatusText("AI is speaking...");
         } else {
+          // Append token to the current streaming entry
+          setTranscript((prev) =>
+            prev.map((m) =>
+              m.id === streamingRef.id ? { ...m, text: m.text + data.token } : m
+            )
+          );
+        }
+      });
+
+      socket.on("ai_stream_end", () => {
+        // Mark streaming complete
+        if (streamingRef.id) {
+          setTranscript((prev) =>
+            prev.map((m) =>
+              m.id === streamingRef.id ? { ...m, streaming: false } : m
+            )
+          );
+          streamingRef.id = null;
+          setStatusText("Your turn to speak...");
+        }
+      });
+
+      socket.on("transcript_final", (data) => {
+        if (data.role === "user") {
+          setTranscript((prev) => [
+            ...prev,
+            { id: Date.now(), role: data.role, text: data.text, score: data.score },
+          ]);
           setStatusText("AI is thinking...");
+        } else if (!streamingRef.id) {
+          // AI message that wasn't streamed (fallback)
+          setTranscript((prev) => [
+            ...prev,
+            { id: Date.now(), role: data.role, text: data.text, score: data.score },
+          ]);
+          setStatusText("Your turn to speak...");
         }
       });
 
@@ -442,6 +481,9 @@ export default function InterviewPage() {
               </div>
               <p className={`text-sm leading-relaxed pl-7 ${msg.role === "ai" ? "text-text-primary" : "text-text-secondary"}`}>
                 {msg.text}
+                {msg.streaming && (
+                  <span className="inline-block w-1.5 h-4 ml-0.5 bg-[#7C3AED] animate-pulse rounded-sm align-middle" />
+                )}
               </p>
             </motion.div>
           ))}
