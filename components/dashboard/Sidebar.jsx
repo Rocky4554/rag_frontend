@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import {
   LayoutDashboard, Upload, MessageSquare, Brain, AudioLines, Mic,
-  History, User, LogOut, X,
+  Radio, History, User, LogOut, X,
 } from "lucide-react";
 
 const navItems = [
@@ -17,6 +17,7 @@ const navItems = [
   { label: "Quiz", href: "/quiz", icon: Brain },
   { label: "Voice Summary", href: "/summary", icon: AudioLines },
   { label: "AI Interview", href: "/interview", icon: Mic },
+  { label: "Voice Agent", href: "/voice-agent", icon: Radio },
 ];
 
 const bottomNavItems = [

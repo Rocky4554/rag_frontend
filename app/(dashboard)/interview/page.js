@@ -296,25 +296,32 @@ export default function InterviewPage() {
 
           {finalReport ? (
             <div className="space-y-6">
-              {finalReport.scores && (
+              {finalReport.topicScores && Object.keys(finalReport.topicScores).length > 0 && (
                 <div className="bg-bg-card border border-border rounded-2xl p-6">
                   <h3 className="text-sm font-semibold text-text-primary mb-4">Performance Summary</h3>
                   <div className="grid grid-cols-2 gap-4">
-                    {Object.entries(finalReport.scores || finalReport.topicScores || {}).map(([topic, score]) => (
-                      <div key={topic} className="p-3 rounded-xl bg-bg-elevated">
-                        <p className="text-xs text-text-muted mb-1 capitalize">{topic}</p>
-                        <p className="text-lg font-bold text-text-primary">{typeof score === "number" ? `${score}/10` : score}</p>
-                      </div>
-                    ))}
+                    {Object.entries(finalReport.topicScores).map(([topic, scoreArr]) => {
+                      const arr = Array.isArray(scoreArr) ? scoreArr : [scoreArr];
+                      const avg = arr.length
+                        ? (arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(1)
+                        : "N/A";
+                      const color = parseFloat(avg) >= 7 ? "#22C55E" : parseFloat(avg) >= 4 ? "#F59E0B" : "#EF4444";
+                      return (
+                        <div key={topic} className="p-3 rounded-xl bg-bg-elevated">
+                          <p className="text-xs text-text-muted mb-1 capitalize">{topic}</p>
+                          <p className="text-lg font-bold" style={{ color }}>{avg}/10</p>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
 
-              {finalReport.finalReport && (
+              {finalReport.report && (
                 <div className="bg-bg-card border border-border rounded-2xl p-6">
                   <h3 className="text-sm font-semibold text-text-primary mb-3">Detailed Report</h3>
                   <div className="text-sm text-text-secondary leading-relaxed whitespace-pre-line">
-                    {finalReport.finalReport}
+                    {finalReport.report}
                   </div>
                 </div>
               )}

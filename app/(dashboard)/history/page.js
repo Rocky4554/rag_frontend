@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   FileText, MessageSquare, Brain, Mic, Clock, Loader2, ChevronRight,
@@ -20,6 +21,7 @@ export default function HistoryPage() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const { setSession } = useSession();
+  const router = useRouter();
 
   useEffect(() => {
     setLoading(true);
@@ -42,6 +44,26 @@ export default function HistoryPage() {
       filename: doc.originalName || doc.filename,
       uploadedAt: doc.createdAt,
     });
+    router.push('/chat');
+  };
+
+  const handleSelectInterview = (item) => {
+    setSession({
+      sessionId: item.sessionId,
+      filename: item.documentName || 'Document',
+      uploadedAt: item.createdAt,
+    });
+    router.push('/interview');
+  };
+
+  const handleSelectQuiz = (item) => {
+    if (!item.sessionId) return;
+    setSession({
+      sessionId: item.sessionId,
+      filename: item.documentName || 'Document',
+      uploadedAt: item.createdAt,
+    });
+    router.push('/quiz');
   };
 
   const actionLabels = {
@@ -116,48 +138,59 @@ export default function HistoryPage() {
 
             {activeTab === "interviews" &&
               data.map((item) => (
-                <div key={item.id} className="px-5 py-4">
+                <button
+                  key={item.id}
+                  onClick={() => handleSelectInterview(item)}
+                  className="w-full px-5 py-4 hover:bg-bg-elevated transition-colors text-left cursor-pointer"
+                >
                   <div className="flex items-center gap-3 mb-2">
-                    <div className="w-8 h-8 rounded-lg bg-[#22C55E]/10 flex items-center justify-center">
+                    <div className="w-8 h-8 rounded-lg bg-[#22C55E]/10 flex items-center justify-center shrink-0">
                       <Mic className="w-4 h-4 text-[#22C55E]" />
                     </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-text-primary">
-                        Interview — {item.questionsAsked || 0} questions
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-text-primary truncate">
+                        {item.documentName || "Interview"} — {item.questionsAsked || 0} questions
                       </p>
                       <p className="text-xs text-text-muted">
                         {item.difficultyLevel || "medium"} &middot; {new Date(item.createdAt).toLocaleDateString()}
                       </p>
                     </div>
+                    <ChevronRight className="w-4 h-4 text-text-muted shrink-0" />
                   </div>
                   {item.finalReport && (
                     <p className="text-xs text-text-secondary pl-11 line-clamp-2">
                       {item.finalReport.slice(0, 200)}...
                     </p>
                   )}
-                </div>
+                </button>
               ))}
 
             {activeTab === "quizzes" &&
               data.map((item) => (
-                <div key={item.id} className="px-5 py-4 flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-[#F59E0B]/10 flex items-center justify-center">
+                <button
+                  key={item.id}
+                  onClick={() => handleSelectQuiz(item)}
+                  disabled={!item.sessionId}
+                  className="w-full px-5 py-4 flex items-center gap-3 hover:bg-bg-elevated transition-colors text-left cursor-pointer disabled:cursor-default disabled:opacity-60"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-[#F59E0B]/10 flex items-center justify-center shrink-0">
                     <Brain className="w-4 h-4 text-[#F59E0B]" />
                   </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-text-primary">
-                      {item.topic || "General"} Quiz
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-text-primary truncate">
+                      {item.documentName ? `${item.documentName} — ` : ""}{item.topic || "General"} Quiz
                     </p>
                     <p className="text-xs text-text-muted">
                       {item.totalQuestions} questions &middot; {new Date(item.createdAt).toLocaleDateString()}
                     </p>
                   </div>
                   {item.score !== null && (
-                    <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-[#22C55E]/10 text-[#22C55E]">
+                    <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-[#22C55E]/10 text-[#22C55E] shrink-0">
                       {item.score}/{item.totalQuestions}
                     </span>
                   )}
-                </div>
+                  {item.sessionId && <ChevronRight className="w-4 h-4 text-text-muted shrink-0" />}
+                </button>
               ))}
 
             {activeTab === "activity" &&
