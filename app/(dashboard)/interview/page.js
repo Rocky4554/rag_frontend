@@ -95,12 +95,33 @@ export default function InterviewPage() {
           ]);
           setStatusText("AI is thinking...");
         } else if (!streamingRef.id) {
-          // AI message that wasn't streamed (fallback)
+          // AI message that wasn't streamed — simulate typewriter effect
+          const msgId = Date.now();
+          const fullText = data.text || "";
+          // Split into words for smooth typewriter
+          const words = fullText.split(/(\s+)/);
+          let shown = "";
           setTranscript((prev) => [
             ...prev,
-            { id: Date.now(), role: data.role, text: data.text, score: data.score },
+            { id: msgId, role: data.role, text: "", score: data.score, streaming: true },
           ]);
-          setStatusText("Your turn to speak...");
+          setStatusText("AI is speaking...");
+          let i = 0;
+          const typeTimer = setInterval(() => {
+            if (i >= words.length) {
+              clearInterval(typeTimer);
+              setTranscript((prev) =>
+                prev.map((m) => (m.id === msgId ? { ...m, streaming: false } : m))
+              );
+              setStatusText("Your turn to speak...");
+              return;
+            }
+            shown += words[i];
+            i++;
+            setTranscript((prev) =>
+              prev.map((m) => (m.id === msgId ? { ...m, text: shown } : m))
+            );
+          }, 30);
         }
       });
 

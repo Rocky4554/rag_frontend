@@ -13,6 +13,7 @@ export default function ChatPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [error, setError] = useState("");
+  const [streamingMsgId, setStreamingMsgId] = useState(null);
   const { activeSession } = useSession();
   const { user } = useAuth();
   const messagesEndRef = useRef(null);
@@ -78,7 +79,6 @@ export default function ChatPage() {
     if (textareaRef.current) textareaRef.current.style.height = "auto";
 
     const aiMsgId = Date.now() + 1;
-    setMessages((prev) => [...prev, { id: aiMsgId, role: "ai", content: "" }]);
 
     try {
       const res = await chatAPI.sendStream(sessionId, userMsg.content);
@@ -90,6 +90,7 @@ export default function ChatPage() {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let firstToken = true;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -101,24 +102,42 @@ export default function ChatPage() {
 
         for (const line of lines) {
           if (!line.startsWith("data: ")) continue;
-          const json = JSON.parse(line.slice(6));
-          if (json.done) break;
-          if (json.error) throw new Error(json.error);
-          if (json.token) {
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === aiMsgId ? { ...m, content: m.content + json.token } : m
-              )
-            );
+          try {
+            const json = JSON.parse(line.slice(6));
+            if (json.done) break;
+            if (json.error) throw new Error(json.error);
+            if (json.token) {
+              if (firstToken) {
+                // First token — add the AI message to the list
+                setMessages((prev) => [
+                  ...prev,
+                  { id: aiMsgId, role: "ai", content: json.token },
+                ]);
+                setStreamingMsgId(aiMsgId);
+                firstToken = false;
+              } else {
+                // Append token to the streaming message
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === aiMsgId ? { ...m, content: m.content + json.token } : m
+                  )
+                );
+              }
+            }
+          } catch (parseErr) {
+            if (parseErr.message && !parseErr.message.includes("JSON")) throw parseErr;
           }
         }
       }
+      // If stream ended but no tokens were received, show an error
+      if (firstToken) {
+        setError("No response received. The server may be overloaded — please try again.");
+      }
     } catch (err) {
-      // Remove empty AI message on error
-      setMessages((prev) => prev.filter((m) => m.id !== aiMsgId || m.content));
       setError(err.message || "Failed to get response");
     } finally {
       setIsLoading(false);
+      setStreamingMsgId(null);
     }
   };
 
@@ -204,7 +223,8 @@ export default function ChatPage() {
                     )}
                   </p>
                 ))}
-                {msg.role === "ai" && isLoading && msg.id === messages[messages.length - 1]?.id && (
+                {/* Blinking cursor while this message is actively streaming */}
+                {streamingMsgId === msg.id && (
                   <span className="inline-block w-1.5 h-4 ml-0.5 bg-[#7C3AED] animate-pulse rounded-sm align-middle" />
                 )}
               </div>
@@ -212,8 +232,8 @@ export default function ChatPage() {
           ))
         )}
 
-        {/* Loading indicator — shown only before first token arrives */}
-        {isLoading && messages[messages.length - 1]?.content === "" && (
+        {/* Thinking indicator — shown while waiting for first token */}
+        {isLoading && !streamingMsgId && (
           <div className="flex gap-3 max-w-3xl">
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#7C3AED] to-[#0EA5E9] flex items-center justify-center shrink-0">
               <Sparkles className="w-4 h-4 text-white" />

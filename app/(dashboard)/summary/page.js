@@ -39,12 +39,7 @@ export default function SummaryPage() {
     }
   }, [sessionId]);
 
-  // Generate on mount if session exists
-  useEffect(() => {
-    if (sessionId && !summaryText) {
-      generateSummary();
-    }
-  }, [sessionId, summaryText, generateSummary]);
+  // No auto-start — user clicks the button to generate
 
   // Audio time updates
   useEffect(() => {
@@ -121,26 +116,56 @@ export default function SummaryPage() {
     );
   }
 
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full text-center">
-        <Loader2 className="w-8 h-8 animate-spin text-[#7C3AED] mb-4" />
-        <p className="text-text-muted">Generating summary and audio...</p>
-        <p className="text-xs text-text-muted mt-1">This may take a moment</p>
-      </div>
-    );
-  }
-
-  if (error) {
+  // Show generate button when no summary exists yet (or loading/error)
+  if (!summaryText) {
     return (
       <div className="max-w-3xl mx-auto py-8">
-        <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-sm text-red-500 flex items-center gap-2 mb-4">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          {error}
-        </div>
-        <button onClick={generateSummary} className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#7C3AED] to-[#0EA5E9] text-white text-sm font-medium">
-          Try Again
-        </button>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+          <h1 className="text-2xl font-bold text-text-primary mb-2">Voice Summary</h1>
+          <p className="text-text-muted mb-8">Generate an AI-powered audio summary of your document</p>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.1 }}
+          className="bg-bg-card border border-border rounded-2xl p-8 flex flex-col items-center text-center"
+        >
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#7C3AED]/10 to-[#0EA5E9]/10 flex items-center justify-center mb-5">
+            <Volume2 className="w-7 h-7 text-[#7C3AED]" />
+          </div>
+          <h3 className="text-lg font-semibold text-text-primary mb-2">
+            {activeSession?.filename || "Your Document"}
+          </h3>
+          <p className="text-sm text-text-muted mb-6 max-w-md">
+            Click below to generate a concise summary and audio narration of your uploaded document.
+          </p>
+
+          {error && (
+            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-sm text-red-500 flex items-center gap-2 mb-4 w-full max-w-md">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              {error}
+            </div>
+          )}
+
+          <button
+            onClick={generateSummary}
+            disabled={loading}
+            className="px-6 py-3 rounded-xl bg-gradient-to-r from-[#7C3AED] to-[#0EA5E9] text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <Play className="w-4 h-4" />
+                Generate Summary
+              </>
+            )}
+          </button>
+        </motion.div>
       </div>
     );
   }
