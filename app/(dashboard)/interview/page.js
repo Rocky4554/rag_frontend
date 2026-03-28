@@ -53,36 +53,36 @@ export default function InterviewPage() {
       const socket = registerSession(sessionId);
 
       // Listen for transcript events
-      const streamingRef = { id: null };
+      // ai_speech: speech-synchronized transcript events emitted by worker.js
+      // { action: 'start' }           — new AI turn beginning, create empty entry
+      // { action: 'sentence', text }  — one sentence finished playing, append it
+      // { action: 'end' }             — turn complete, mark entry as done
+      const aiSpeechRef = { id: null };
 
-      socket.on("ai_stream", (data) => {
-        if (!streamingRef.id) {
-          // First token — create a new transcript entry
-          streamingRef.id = Date.now();
+      socket.on("ai_speech", (data) => {
+        if (data.action === "start") {
+          const id = Date.now();
+          aiSpeechRef.id = id;
           setTranscript((prev) => [
             ...prev,
-            { id: streamingRef.id, role: "ai", text: data.token, streaming: true },
+            { id, role: "ai", text: "", streaming: true },
           ]);
           setStatusText("AI is speaking...");
-        } else {
-          // Append token to the current streaming entry
+        } else if (data.action === "sentence" && aiSpeechRef.id) {
           setTranscript((prev) =>
             prev.map((m) =>
-              m.id === streamingRef.id ? { ...m, text: m.text + data.token } : m
+              m.id === aiSpeechRef.id
+                ? { ...m, text: m.text ? m.text + " " + data.text : data.text }
+                : m
             )
           );
-        }
-      });
-
-      socket.on("ai_stream_end", () => {
-        // Mark streaming complete
-        if (streamingRef.id) {
+        } else if (data.action === "end" && aiSpeechRef.id) {
           setTranscript((prev) =>
             prev.map((m) =>
-              m.id === streamingRef.id ? { ...m, streaming: false } : m
+              m.id === aiSpeechRef.id ? { ...m, streaming: false } : m
             )
           );
-          streamingRef.id = null;
+          aiSpeechRef.id = null;
           setStatusText("Your turn to speak...");
         }
       });
@@ -94,34 +94,6 @@ export default function InterviewPage() {
             { id: Date.now(), role: data.role, text: data.text, score: data.score },
           ]);
           setStatusText("AI is thinking...");
-        } else if (!streamingRef.id) {
-          // AI message that wasn't streamed — simulate typewriter effect
-          const msgId = Date.now();
-          const fullText = data.text || "";
-          // Split into words for smooth typewriter
-          const words = fullText.split(/(\s+)/);
-          let shown = "";
-          setTranscript((prev) => [
-            ...prev,
-            { id: msgId, role: data.role, text: "", score: data.score, streaming: true },
-          ]);
-          setStatusText("AI is speaking...");
-          let i = 0;
-          const typeTimer = setInterval(() => {
-            if (i >= words.length) {
-              clearInterval(typeTimer);
-              setTranscript((prev) =>
-                prev.map((m) => (m.id === msgId ? { ...m, streaming: false } : m))
-              );
-              setStatusText("Your turn to speak...");
-              return;
-            }
-            shown += words[i];
-            i++;
-            setTranscript((prev) =>
-              prev.map((m) => (m.id === msgId ? { ...m, text: shown } : m))
-            );
-          }, 30);
         }
       });
 
