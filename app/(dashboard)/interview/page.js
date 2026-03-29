@@ -7,6 +7,7 @@ import { interviewAPI, tokenAPI } from "@/lib/api";
 import { useSession } from "@/lib/session-context";
 import { registerSession, getSocket, disconnectSocket } from "@/lib/socket";
 import { Room, RoomEvent, Track } from "livekit-client";
+import SubtitleHighlighter from "@/components/interview/SubtitleHighlighter";
 
 export default function InterviewPage() {
   const { activeSession } = useSession();
@@ -24,6 +25,8 @@ export default function InterviewPage() {
   const [finalReport, setFinalReport] = useState(null);
   const [error, setError] = useState("");
   const [statusText, setStatusText] = useState("Connecting...");
+  const [subtitleWords, setSubtitleWords] = useState([]);
+  const [isAiSpeaking, setIsAiSpeaking] = useState(false);
 
   // Refs
   const roomRef = useRef(null);
@@ -59,6 +62,13 @@ export default function InterviewPage() {
       // { action: 'end' }             — turn complete, mark entry as done
       const aiSpeechRef = { id: null };
 
+      socket.on("ai_subtitle", (data) => {
+        if (data.words?.length > 0) {
+          setSubtitleWords(data.words);
+          setIsAiSpeaking(true);
+        }
+      });
+
       socket.on("ai_speech", (data) => {
         if (data.action === "start") {
           const id = Date.now();
@@ -83,6 +93,8 @@ export default function InterviewPage() {
             )
           );
           aiSpeechRef.id = null;
+          setIsAiSpeaking(false);
+          setSubtitleWords([]);
           setStatusText("Your turn to speak...");
         }
       });
@@ -408,6 +420,15 @@ export default function InterviewPage() {
               {isMuted ? <MicOff className="w-7 h-7 text-white" /> : <Mic className="w-7 h-7 text-white" />}
             </div>
           </div>
+        </div>
+
+        {/* Subtitles — Netflix-style word highlighting */}
+        <div className="w-full mb-4 min-h-12">
+          <SubtitleHighlighter
+            words={subtitleWords}
+            isPlaying={isAiSpeaking}
+            onComplete={() => setIsAiSpeaking(false)}
+          />
         </div>
 
         {/* Status */}
