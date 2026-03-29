@@ -1,11 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import { usePathname } from "next/navigation";
-import Link from "next/link";
 import { Bell, FileText, Menu } from "lucide-react";
 import { useSession } from "@/lib/session-context";
 import { useAuth } from "@/lib/auth-context";
 import { useSidebar } from "@/components/dashboard/Sidebar";
+import DocumentSwitcher from "@/components/dashboard/DocumentSwitcher";
 
 const pageTitles = {
   "/dashboard": "Dashboard",
@@ -23,6 +24,7 @@ export default function Topbar() {
   const { activeSession } = useSession();
   const { user } = useAuth();
   const { toggle } = useSidebar();
+  const [switcherOpen, setSwitcherOpen] = useState(false);
   const pageTitle = pageTitles[pathname] || "Dashboard";
 
   const initials = user?.name
@@ -52,23 +54,29 @@ export default function Topbar() {
 
       {/* Active document pill */}
       {activeSession && (
-        <div className="hidden md:flex items-center gap-3 px-4 py-1.5 rounded-full border border-[#7C3AED]/30 bg-gradient-to-r from-[#7C3AED]/5 to-[#0EA5E9]/5">
+        <div className="hidden md:flex items-center gap-3 px-4 py-1.5 rounded-full border border-[#7C3AED]/30 bg-linear-to-r from-[#7C3AED]/5 to-[#0EA5E9]/5">
           <FileText className="w-4 h-4 text-[#7C3AED]" />
-          <span className="text-sm text-text-primary font-medium truncate max-w-[180px]">
+          <span className="text-sm text-text-primary font-medium truncate max-w-45">
             {activeSession.filename}
           </span>
-          <Link href="/upload" className="text-xs text-[#7C3AED] font-medium hover:underline">
+          <button
+            onClick={() => setSwitcherOpen(true)}
+            className="text-xs text-[#7C3AED] font-medium hover:underline cursor-pointer"
+          >
             Change
-          </Link>
+          </button>
         </div>
       )}
+
+      {/* Document switcher modal */}
+      <DocumentSwitcher open={switcherOpen} onClose={() => setSwitcherOpen(false)} />
 
       {/* Right actions */}
       <div className="flex items-center gap-2 md:gap-4">
         <button className="relative p-2 rounded-lg hover:bg-bg-elevated transition-colors">
           <Bell className="w-5 h-5 text-text-secondary" />
         </button>
-        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#7C3AED] to-[#0EA5E9] flex items-center justify-center text-white text-xs font-semibold">
+        <div className="w-8 h-8 rounded-full bg-linear-to-br from-[#7C3AED] to-[#0EA5E9] flex items-center justify-center text-white text-xs font-semibold">
           {initials}
         </div>
       </div>

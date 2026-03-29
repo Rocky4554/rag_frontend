@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
-  FileText, MessageSquare, Brain, Mic, Clock, Loader2, ChevronRight,
+  FileText, MessageSquare, Brain, Mic, Clock, Loader2, ChevronRight, Trash2,
 } from "lucide-react";
 import { historyAPI } from "@/lib/api";
 import { useSession } from "@/lib/session-context";
@@ -20,8 +20,10 @@ export default function HistoryPage() {
   const [activeTab, setActiveTab] = useState("documents");
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
-  const { setSession } = useSession();
+  const { activeSession, setSession, clearSession } = useSession();
   const router = useRouter();
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [deleting, setDeleting] = useState(null);
 
   useEffect(() => {
     setLoading(true);
@@ -64,6 +66,25 @@ export default function HistoryPage() {
       uploadedAt: item.createdAt,
     });
     router.push('/quiz');
+  };
+
+  const handleDeleteDocument = async (e, doc) => {
+    e.stopPropagation();
+    if (confirmDeleteId !== doc.sessionId) {
+      setConfirmDeleteId(doc.sessionId);
+      return;
+    }
+    setDeleting(doc.sessionId);
+    try {
+      await historyAPI.deleteDocument(doc.sessionId);
+      if (activeSession?.sessionId === doc.sessionId) clearSession();
+      setData((prev) => prev.filter((d) => d.sessionId !== doc.sessionId));
+      setConfirmDeleteId(null);
+    } catch {
+      setConfirmDeleteId(null);
+    } finally {
+      setDeleting(null);
+    }
   };
 
   const actionLabels = {
@@ -114,27 +135,104 @@ export default function HistoryPage() {
           </div>
         ) : (
           <div className="bg-bg-card border border-border rounded-2xl divide-y divide-border">
-            {activeTab === "documents" &&
-              data.map((doc) => (
-                <button
-                  key={doc.id}
-                  onClick={() => handleSelectDocument(doc)}
-                  className="w-full flex items-center gap-4 px-5 py-4 hover:bg-bg-elevated transition-colors text-left cursor-pointer"
-                >
-                  <div className="w-10 h-10 rounded-lg bg-[#7C3AED]/10 flex items-center justify-center shrink-0">
-                    <FileText className="w-5 h-5 text-[#7C3AED]" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-text-primary truncate">
-                      {doc.originalName || doc.filename}
-                    </p>
-                    <p className="text-xs text-text-muted">
-                      {doc.chunkCount} chunks &middot; {new Date(doc.createdAt).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-text-muted" />
-                </button>
-              ))}
+            {activeTab === "documents" && (
+              <AnimatePresence initial={false}>
+                {data.map((doc) => {
+                  const isConfirming = confirmDeleteId === doc.sessionId;
+                  const isDeleting = deleting === doc.sessionId;
+                  return (
+                    <motion.div
+                      key={doc.sessionId}
+                      layout
+                      exit={{ opacity: 0, x: -30, height: 0, transition: { opacity: { duration: 0.15 }, height: { duration: 0.25, delay: 0.1 } } }}
+                      className="overflow-hidden"
+                    >
+                      <motion.div
+                        animate={isDeleting ? { opacity: [0.5, 0.3, 0.5] } : { opacity: 1 }}
+                        transition={isDeleting ? { duration: 1, repeat: Infinity, ease: "easeInOut" } : {}}
+                        onClick={() => !isConfirming && !isDeleting && handleSelectDocument(doc)}
+                        className={`w-full flex items-center gap-4 px-5 py-4 text-left transition-colors group ${
+                          isDeleting
+                            ? "bg-error/5 pointer-events-none"
+                            : isConfirming
+                              ? "bg-error/5"
+                              : "hover:bg-bg-elevated cursor-pointer"
+                        }`}
+                      >
+                        <motion.div
+                          animate={isConfirming ? { scale: [1, 0.9, 1], rotate: [0, -3, 3, 0] } : {}}
+                          transition={isConfirming ? { duration: 0.4 } : {}}
+                          className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
+                            isConfirming ? "bg-error/10" : "bg-[#7C3AED]/10"
+                          }`}
+                        >
+                          <FileText className={`w-5 h-5 transition-colors ${isConfirming ? "text-error" : "text-[#7C3AED]"}`} />
+                        </motion.div>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-medium truncate transition-colors ${isConfirming ? "text-error" : "text-text-primary"}`}>
+                            {doc.originalName || doc.filename}
+                          </p>
+                          <p className="text-xs text-text-muted">
+                            {doc.chunkCount} chunks &middot; {new Date(doc.createdAt).toLocaleDateString()}
+                          </p>
+                        </div>
+
+                        <AnimatePresence mode="wait">
+                          {isConfirming ? (
+                            <motion.div
+                              key="confirm"
+                              initial={{ opacity: 0, width: 0 }}
+                              animate={{ opacity: 1, width: "auto" }}
+                              exit={{ opacity: 0, width: 0 }}
+                              transition={{ type: "spring", damping: 22, stiffness: 350 }}
+                              className="flex items-center gap-1.5 shrink-0"
+                            >
+                              {isDeleting ? (
+                                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-error/10">
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-error" />
+                                  <span className="text-xs font-medium text-error">Deleting...</span>
+                                </motion.div>
+                              ) : (
+                                <>
+                                  <motion.button
+                                    onClick={(e) => handleDeleteDocument(e, doc)}
+                                    whileTap={{ scale: 0.92 }}
+                                    className="px-2.5 py-1 rounded-md bg-error text-white text-xs font-medium hover:bg-error/90 transition-colors cursor-pointer"
+                                  >
+                                    Delete
+                                  </motion.button>
+                                  <motion.button
+                                    onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(null); }}
+                                    whileTap={{ scale: 0.92 }}
+                                    className="px-2.5 py-1 rounded-md bg-bg-elevated text-text-secondary text-xs font-medium hover:bg-border transition-colors cursor-pointer"
+                                  >
+                                    Cancel
+                                  </motion.button>
+                                </>
+                              )}
+                            </motion.div>
+                          ) : (
+                            <motion.button
+                              key="trash"
+                              initial={{ opacity: 0, scale: 0.5 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              exit={{ opacity: 0, scale: 0.5 }}
+                              onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(doc.sessionId); }}
+                              whileHover={{ scale: 1.15 }}
+                              whileTap={{ scale: 0.85 }}
+                              className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 hover:bg-error/10 transition-all cursor-pointer shrink-0"
+                              title="Delete document"
+                            >
+                              <Trash2 className="w-5 h-5 text-text-muted hover:text-error transition-colors" />
+                            </motion.button>
+                          )}
+                        </AnimatePresence>
+                      </motion.div>
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
+            )}
 
             {activeTab === "interviews" &&
               data.map((item) => (

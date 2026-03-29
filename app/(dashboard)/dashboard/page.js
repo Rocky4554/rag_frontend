@@ -10,6 +10,7 @@ import {
 import { useSession } from "@/lib/session-context";
 import { useAuth } from "@/lib/auth-context";
 import { historyAPI } from "@/lib/api";
+import DocumentSwitcher from "@/components/dashboard/DocumentSwitcher";
 
 const features = [
   {
@@ -46,6 +47,7 @@ export default function DashboardPage() {
   const { activeSession } = useSession();
   const { user } = useAuth();
   const [recentActivity, setRecentActivity] = useState([]);
+  const [switcherOpen, setSwitcherOpen] = useState(false);
 
   useEffect(() => {
     historyAPI.getActivity(5)
@@ -103,12 +105,12 @@ export default function DashboardPage() {
                 </div>
               </div>
             </div>
-            <Link
-              href="/upload"
-              className="px-5 py-2 rounded-lg border border-[#7C3AED]/30 text-sm font-medium text-[#7C3AED] hover:bg-[#7C3AED]/5 transition-colors"
+            <button
+              onClick={() => setSwitcherOpen(true)}
+              className="px-5 py-2 rounded-lg border border-[#7C3AED]/30 text-sm font-medium text-[#7C3AED] hover:bg-[#7C3AED]/5 transition-colors cursor-pointer"
             >
               Change Document
-            </Link>
+            </button>
           </div>
         </motion.div>
       ) : (
@@ -121,15 +123,15 @@ export default function DashboardPage() {
           <div className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-br from-[#7C3AED]/10 to-[#0EA5E9]/10 flex items-center justify-center mb-4">
             <Upload className="w-7 h-7 text-[#7C3AED]" />
           </div>
-          <h3 className="text-lg font-semibold text-text-primary mb-2">No document uploaded</h3>
-          <p className="text-sm text-text-muted mb-4">Upload a PDF to unlock all learning features</p>
-          <Link
-            href="/upload"
-            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#7C3AED] to-[#0EA5E9] text-white text-sm font-medium hover:opacity-90 transition-opacity"
+          <h3 className="text-lg font-semibold text-text-primary mb-2">No document selected</h3>
+          <p className="text-sm text-text-muted mb-4">Select a document or add a new one to unlock all learning features</p>
+          <button
+            onClick={() => setSwitcherOpen(true)}
+            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#7C3AED] to-[#0EA5E9] text-white text-sm font-medium hover:opacity-90 transition-opacity cursor-pointer"
           >
-            <Upload className="w-4 h-4" />
-            Upload Document
-          </Link>
+            <FileText className="w-4 h-4" />
+            Select Document
+          </button>
         </motion.div>
       )}
 
@@ -209,6 +211,9 @@ export default function DashboardPage() {
           </div>
         </motion.div>
       )}
+
+      {/* Document switcher modal */}
+      <DocumentSwitcher open={switcherOpen} onClose={() => setSwitcherOpen(false)} />
     </div>
   );
 }
