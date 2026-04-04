@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Mail, Lock, Loader2, UserCheck } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, getUserFriendlyError } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 
 export default function LoginForm() {
@@ -28,7 +28,7 @@ export default function LoginForm() {
       await login(email, password);
       router.push("/dashboard");
     } catch (err) {
-      setError(err.response?.data?.error || "Invalid email or password");
+      setError(getUserFriendlyError(err, "Invalid email or password. Please try again."));
     } finally {
       setIsLoading(false);
     }
@@ -56,7 +56,7 @@ export default function LoginForm() {
         type="button"
         onClick={() => {
           setEmail("ultimatekller45@gmail.com");
-          setPassword("Raunak@123");
+          setPassword("Demo@123");
           setError("");
         }}
         className={cn(

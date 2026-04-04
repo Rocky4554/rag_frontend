@@ -8,6 +8,7 @@ import { useSession } from "@/lib/session-context";
 import { registerSession, getSocket, disconnectSocket } from "@/lib/socket";
 import { Room, RoomEvent, Track } from "livekit-client";
 import SubtitleHighlighter from "@/components/interview/SubtitleHighlighter";
+import { getUserFriendlyError } from "@/lib/utils";
 
 export default function InterviewPage() {
   const { activeSession } = useSession();
@@ -161,7 +162,7 @@ export default function InterviewPage() {
       setPhase("active");
       setStatusText("AI is preparing first question...");
     } catch (err) {
-      setError(err.response?.data?.error || err.message || "Failed to start interview");
+      setError(getUserFriendlyError(err, "Failed to start the interview. Please try again."));
       setPhase("setup");
     }
   };

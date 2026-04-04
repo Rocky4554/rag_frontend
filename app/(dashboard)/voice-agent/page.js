@@ -7,6 +7,8 @@ import { voiceAgentAPI } from "@/lib/api";
 import { useSession } from "@/lib/session-context";
 import { registerSession, disconnectSocket } from "@/lib/socket";
 import { Room, RoomEvent, Track } from "livekit-client";
+import SubtitleHighlighter from "@/components/interview/SubtitleHighlighter";
+import { getUserFriendlyError } from "@/lib/utils";
 
 export default function VoiceAgentPage() {
   const { activeSession } = useSession();
@@ -17,6 +19,8 @@ export default function VoiceAgentPage() {
   const [isMuted, setIsMuted] = useState(false);
   const [transcript, setTranscript] = useState([]);
   const [error, setError] = useState("");
+  const [subtitleWords, setSubtitleWords] = useState([]);
+  const [isAiSpeaking, setIsAiSpeaking] = useState(false);
 
   const roomRef = useRef(null);
   const transcriptEndRef = useRef(null);
@@ -96,6 +100,13 @@ export default function VoiceAgentPage() {
         }
       });
 
+      socket.on("ai_subtitle", (data) => {
+        if (data.words?.length > 0) {
+          setSubtitleWords(data.words);
+          setIsAiSpeaking(true);
+        }
+      });
+
       socket.on("voice_state", (data) => {
         setAgentState(data.state || "listening");
       });
@@ -136,7 +147,7 @@ export default function VoiceAgentPage() {
       setPhase("active");
       setAgentState("listening");
     } catch (err) {
-      setError(err.response?.data?.error || err.message || "Failed to start voice session");
+      setError(getUserFriendlyError(err, "Failed to start voice session. Please try again."));
       setPhase("idle");
     }
   };
@@ -159,8 +170,6 @@ export default function VoiceAgentPage() {
       : isMuted
       ? "Microphone muted"
       : "Listening...";
-
-  const isAiSpeaking = phase === "active" && agentState === "speaking";
 
   // ── Idle / No session ──────────────────────────────────────────
   if (!sessionId && phase === "idle") {
@@ -277,6 +286,15 @@ export default function VoiceAgentPage() {
               )}
             </div>
           </div>
+        </div>
+
+        {/* Netflix-style subtitles */}
+        <div className="w-full mb-4 min-h-12">
+          <SubtitleHighlighter
+            words={subtitleWords}
+            isPlaying={isAiSpeaking}
+            onComplete={() => setIsAiSpeaking(false)}
+          />
         </div>
 
         {/* Status */}

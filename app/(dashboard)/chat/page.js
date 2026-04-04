@@ -6,6 +6,7 @@ import { ArrowUp, Sparkles, Loader2, AlertCircle } from "lucide-react";
 import { chatAPI } from "@/lib/api";
 import { useSession } from "@/lib/session-context";
 import { useAuth } from "@/lib/auth-context";
+import { getUserFriendlyError } from "@/lib/utils";
 
 export default function ChatPage() {
   const [messages, setMessages] = useState([]);
@@ -134,7 +135,7 @@ export default function ChatPage() {
         setError("No response received. The server may be overloaded — please try again.");
       }
     } catch (err) {
-      setError(err.message || "Failed to get response");
+      setError(getUserFriendlyError(err, "Failed to get a response. Please try again."));
     } finally {
       setIsLoading(false);
       setStreamingMsgId(null);

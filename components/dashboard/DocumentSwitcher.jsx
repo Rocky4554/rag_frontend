@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { historyAPI, uploadAPI } from "@/lib/api";
 import { useSession } from "@/lib/session-context";
+import { getUserFriendlyError } from "@/lib/utils";
 
 // ── Animation variants ──────────────────────────────────────────
 const overlayVariants = {
@@ -203,7 +204,7 @@ export default function DocumentSwitcher({ open, onClose }) {
       onClose();
       router.push("/dashboard");
     } catch (err) {
-      setUploadError(err.response?.data?.error || "Upload failed. Please try again.");
+      setUploadError(getUserFriendlyError(err, "Upload failed. Please try again."));
     } finally {
       setUploading(false);
     }

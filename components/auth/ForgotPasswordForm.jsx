@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mail, Lock, KeyRound, ArrowLeft, Loader2, CheckCircle2 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, getUserFriendlyError } from "@/lib/utils";
 import { authAPI } from "@/lib/api";
 
 export default function ForgotPasswordForm() {
@@ -30,7 +30,7 @@ export default function ForgotPasswordForm() {
       await authAPI.forgotPassword(email);
       setStep("otp");
     } catch (err) {
-      setError(err.response?.data?.error || "Failed to send reset code");
+      setError(getUserFriendlyError(err, "Failed to send reset code. Please try again."));
     } finally {
       setIsLoading(false);
     }
@@ -73,7 +73,7 @@ export default function ForgotPasswordForm() {
       await authAPI.verifyOtp(email, code);
       setStep("newPassword");
     } catch (err) {
-      setError(err.response?.data?.error || "Invalid or expired code");
+      setError(getUserFriendlyError(err, "Invalid or expired code. Please try again."));
     } finally {
       setIsLoading(false);
     }
@@ -90,7 +90,7 @@ export default function ForgotPasswordForm() {
       await authAPI.resetPassword(email, otp.join(""), newPassword);
       setStep("done");
     } catch (err) {
-      setError(err.response?.data?.error || "Failed to reset password");
+      setError(getUserFriendlyError(err, "Failed to reset password. Please try again."));
     } finally {
       setIsLoading(false);
     }

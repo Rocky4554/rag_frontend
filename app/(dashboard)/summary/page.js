@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { Play, Pause, Volume2, Copy, Check, Loader2, AlertCircle } from "lucide-react";
 import { summaryAPI } from "@/lib/api";
 import { useSession } from "@/lib/session-context";
+import { getUserFriendlyError } from "@/lib/utils";
 
 export default function SummaryPage() {
   const { activeSession } = useSession();
@@ -33,7 +34,7 @@ export default function SummaryPage() {
         setAudioSrc(`data:audio/mp3;base64,${data.audio}`);
       }
     } catch (err) {
-      setError(err.response?.data?.error || "Failed to generate summary");
+      setError(getUserFriendlyError(err, "Failed to generate the summary. Please try again."));
     } finally {
       setLoading(false);
     }

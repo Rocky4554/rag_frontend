@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Mail, Lock, User, Loader2 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, getUserFriendlyError } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 
 export default function SignupForm() {
@@ -38,7 +38,7 @@ export default function SignupForm() {
       await signup(email, password, name);
       router.push("/dashboard");
     } catch (err) {
-      setError(err.response?.data?.error || "Failed to create account");
+      setError(getUserFriendlyError(err, "Failed to create account. Please try again."));
     } finally {
       setIsLoading(false);
     }

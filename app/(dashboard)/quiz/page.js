@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ArrowRight, CheckCircle2, XCircle, Loader2, AlertCircle, RotateCcw, Trophy } from "lucide-react";
 import { quizAPI } from "@/lib/api";
 import { useSession } from "@/lib/session-context";
+import { getUserFriendlyError } from "@/lib/utils";
 
 export default function QuizPage() {
   const { activeSession } = useSession();
@@ -55,7 +56,7 @@ export default function QuizPage() {
       setScore(0);
       setQuizDone(false);
     } catch (err) {
-      setError(err.response?.data?.error || "Failed to generate quiz");
+      setError(getUserFriendlyError(err, "Failed to generate the quiz. Please try again."));
     } finally {
       setGenerating(false);
     }
