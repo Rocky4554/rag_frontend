@@ -191,15 +191,25 @@ export default function InterviewPage() {
 
   const progress = maxQuestions > 0 ? (questionNumber / maxQuestions) * 100 : 0;
 
-  // No session
-  if (!sessionId) {
+  // Check if active session is an image (not supported for interview)
+  const filename = activeSession?.filename || "";
+  const isImageSession = /\.(png|jpg|jpeg|webp|gif)$/i.test(filename);
+
+  // No session or image session
+  if (!sessionId || isImageSession) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center">
         <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#22C55E]/10 to-[#0EA5E9]/10 flex items-center justify-center mb-4">
           <AlertCircle className="w-7 h-7 text-[#22C55E]" />
         </div>
-        <h2 className="text-lg font-semibold text-text-primary mb-2">No Document Loaded</h2>
-        <p className="text-sm text-text-muted mb-4">Upload a PDF first to start an interview.</p>
+        <h2 className="text-lg font-semibold text-text-primary mb-2">
+          {isImageSession ? "Image Not Supported" : "No Document Loaded"}
+        </h2>
+        <p className="text-sm text-text-muted mb-4">
+          {isImageSession
+            ? "Interview requires a PDF or text document. Please upload one to get started."
+            : "Upload a PDF or text document to start an interview."}
+        </p>
         <a href="/upload" className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#7C3AED] to-[#0EA5E9] text-white text-sm font-medium hover:opacity-90 transition-opacity">
           Upload Document
         </a>
