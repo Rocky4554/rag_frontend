@@ -13,21 +13,21 @@ import { Sparkles, User, Mic } from "lucide-react";
  *   subtitleWords - Array of { time: ms, value: "word" } for Netflix-style highlighting
  *   isAiSpeaking  - true when AI audio is playing
  *   agentLabel    - Label for the AI (default: "AI")
+ *   darkMode      - true for dark background (used in active voice sessions)
  */
 export default function ConversationStream({
   messages = [],
   subtitleWords = [],
   isAiSpeaking = false,
   agentLabel = "AI",
+  darkMode = false,
 }) {
   const bottomRef = useRef(null);
 
-  // Auto-scroll to bottom when messages change
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isAiSpeaking]);
 
-  // Find the last streaming AI message to apply Netflix effect to it
   const lastStreamingAiIdx = (() => {
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].role === "ai" && messages[i].streaming) return i;
@@ -35,11 +35,38 @@ export default function ConversationStream({
     return -1;
   })();
 
+  // Color classes based on mode
+  const colors = darkMode
+    ? {
+        aiText: "text-gray-100",
+        userText: "text-gray-400",
+        label: "text-gray-500",
+        empty: "text-gray-600",
+        cursor: "bg-purple-400",
+        userAvatar: "bg-white/10",
+        userIcon: "text-gray-500",
+        netflixActive: "text-gray-100",
+        netflixPast: "text-gray-300",
+        netflixFuture: "text-gray-600/40",
+      }
+    : {
+        aiText: "text-text-primary",
+        userText: "text-text-secondary",
+        label: "text-text-muted",
+        empty: "text-text-muted",
+        cursor: "bg-[#7C3AED]",
+        userAvatar: "bg-bg-elevated",
+        userIcon: "text-text-muted",
+        netflixActive: "text-text-primary",
+        netflixPast: "text-text-primary",
+        netflixFuture: "text-text-muted/40",
+      };
+
   return (
     <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
       {messages.length === 0 && (
         <div className="flex items-center justify-center h-full">
-          <p className="text-sm text-text-muted text-center py-8 flex items-center gap-2">
+          <p className={`text-sm text-center py-8 flex items-center gap-2 ${colors.empty}`}>
             <Mic className="w-4 h-4" />
             Waiting for conversation to begin...
           </p>
@@ -48,7 +75,6 @@ export default function ConversationStream({
 
       <AnimatePresence initial={false}>
         {messages.map((msg, idx) => {
-          // Apply Netflix word highlighting to the last streaming AI message
           const useNetflix =
             idx === lastStreamingAiIdx &&
             isAiSpeaking &&
@@ -69,31 +95,25 @@ export default function ConversationStream({
                     <Sparkles className="w-3.5 h-3.5 text-white" />
                   </div>
                 ) : (
-                  <div className="w-7 h-7 rounded-full bg-bg-elevated flex items-center justify-center">
-                    <User className="w-3.5 h-3.5 text-text-muted" />
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center ${colors.userAvatar}`}>
+                    <User className={`w-3.5 h-3.5 ${colors.userIcon}`} />
                   </div>
                 )}
               </div>
 
               {/* Message */}
               <div className="flex-1 min-w-0">
-                <p className="text-[11px] font-semibold text-text-muted mb-1 uppercase tracking-wide">
+                <p className={`text-[11px] font-semibold mb-1 uppercase tracking-wide ${colors.label}`}>
                   {msg.role === "ai" ? agentLabel : "You"}
                 </p>
 
                 {useNetflix ? (
-                  <NetflixText words={subtitleWords} />
+                  <NetflixText words={subtitleWords} colors={colors} />
                 ) : (
-                  <p
-                    className={`text-sm leading-relaxed ${
-                      msg.role === "ai"
-                        ? "text-text-primary"
-                        : "text-text-secondary"
-                    }`}
-                  >
+                  <p className={`text-sm leading-relaxed ${msg.role === "ai" ? colors.aiText : colors.userText}`}>
                     {msg.text}
                     {msg.streaming && (
-                      <span className="inline-block w-1.5 h-4 ml-0.5 bg-[#7C3AED] animate-pulse rounded-sm align-middle" />
+                      <span className={`inline-block w-1.5 h-4 ml-0.5 ${colors.cursor} animate-pulse rounded-sm align-middle`} />
                     )}
                   </p>
                 )}
@@ -108,11 +128,7 @@ export default function ConversationStream({
   );
 }
 
-/**
- * Netflix-style word-by-word text that highlights words in sync with audio.
- * Renders inline within a message bubble — not as a separate entry.
- */
-function NetflixText({ words }) {
+function NetflixText({ words, colors }) {
   const startTimeRef = useRef(performance.now());
   const [activeIndex, setActiveIndex] = useState(-1);
   const rafRef = useRef(null);
@@ -152,14 +168,14 @@ function NetflixText({ words }) {
             key={`${i}-${word.value}`}
             className={`inline transition-colors duration-100 ${
               isCurrent
-                ? "text-text-primary font-medium"
+                ? `${colors.netflixActive} font-medium`
                 : isPast
-                  ? "text-text-primary"
-                  : "text-text-muted/40"
+                  ? colors.netflixPast
+                  : colors.netflixFuture
             }`}
             style={
               isCurrent
-                ? { textShadow: "0 0 8px rgba(124, 58, 237, 0.4)" }
+                ? { textShadow: "0 0 12px rgba(168, 85, 247, 0.6)" }
                 : undefined
             }
           >

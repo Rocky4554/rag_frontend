@@ -8,6 +8,7 @@ import { useSession } from "@/lib/session-context";
 import { registerSession, getSocket, disconnectSocket } from "@/lib/socket";
 import { Room, RoomEvent, Track } from "livekit-client";
 import ConversationStream from "@/components/shared/ConversationStream";
+import VoiceOrb from "@/components/shared/VoiceOrb";
 import { getUserFriendlyError } from "@/lib/utils";
 
 export default function InterviewPage() {
@@ -369,72 +370,102 @@ export default function InterviewPage() {
     );
   }
 
-  // Active interview
+  // Active interview — dark mode two-panel layout
+  const aiSpeaking = isAiSpeaking || statusText === "AI is speaking...";
+
   return (
-    <div className="flex flex-col h-full -m-4 md:-m-6 p-4 md:p-6 overflow-hidden">
+    <div className="flex flex-col md:flex-row gap-0 h-full -m-4 md:-m-6 overflow-hidden">
+      {/* Left panel — Voice orb + controls (dark) */}
       <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col flex-1 bg-bg-card border border-border rounded-2xl overflow-hidden"
+        initial={{ opacity: 0, x: -20 }}
+        animate={{ opacity: 1, x: 0 }}
+        className="w-full md:w-[340px] shrink-0 flex flex-col items-center justify-between bg-[#0a0a12] p-6 md:p-8"
       >
-        {/* Header bar: progress + controls */}
-        <div className="px-5 py-3 border-b border-border flex items-center gap-4">
-          {/* Progress */}
-          <div className="flex-1">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-xs text-text-muted">
-                Question {questionNumber}/{maxQuestions}
-              </span>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                difficulty === "easy" ? "bg-[#22C55E]/10 text-[#22C55E]" :
-                difficulty === "hard" ? "bg-[#EF4444]/10 text-[#EF4444]" :
-                "bg-[#F59E0B]/10 text-[#F59E0B]"
-              }`}>
-                {difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}
-              </span>
-            </div>
-            <div className="h-1 rounded-full bg-bg-elevated">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${progress}%` }}
-                transition={{ duration: 0.8 }}
-                className="h-full rounded-full bg-gradient-to-r from-[#7C3AED] to-[#0EA5E9]"
-              />
-            </div>
+        {/* Progress bar */}
+        <div className="w-full mb-6">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] text-gray-500 font-medium tracking-wide uppercase">
+              Q {questionNumber}/{maxQuestions}
+            </span>
+            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+              difficulty === "easy" ? "bg-emerald-500/15 text-emerald-400" :
+              difficulty === "hard" ? "bg-red-500/15 text-red-400" :
+              "bg-amber-500/15 text-amber-400"
+            }`}>
+              {difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}
+            </span>
           </div>
-
-          {/* Status indicator */}
-          <motion.div
-            animate={{ opacity: [0.5, 1, 0.5] }}
-            transition={{ duration: 2, repeat: Infinity }}
-            className="text-xs text-text-muted whitespace-nowrap"
-          >
-            {statusText}
-          </motion.div>
-
-          {/* Controls */}
-          <button
-            onClick={toggleMute}
-            className="w-9 h-9 rounded-full bg-bg-elevated flex items-center justify-center hover:bg-border transition-colors cursor-pointer"
-            title={isMuted ? "Unmute" : "Mute"}
-          >
-            {isMuted ? <MicOff className="w-4 h-4 text-red-400" /> : <Mic className="w-4 h-4 text-text-secondary" />}
-          </button>
-          <button
-            onClick={endInterview}
-            className="px-4 py-2 rounded-full bg-[#EF4444] text-white text-xs font-medium flex items-center gap-1.5 hover:bg-[#DC2626] transition-colors cursor-pointer"
-          >
-            <PhoneOff className="w-3.5 h-3.5" />
-            End
-          </button>
+          <div className="h-1 rounded-full bg-white/5">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${progress}%` }}
+              transition={{ duration: 0.8 }}
+              className="h-full rounded-full bg-gradient-to-r from-purple-500 to-cyan-400"
+            />
+          </div>
         </div>
 
-        {/* Conversation stream — replaces both subtitle highlighter and transcript panel */}
+        {/* Voice orb */}
+        <div className="flex-1 flex items-center justify-center">
+          <VoiceOrb
+            isActive={true}
+            isSpeaking={aiSpeaking}
+            isListening={!aiSpeaking && !isMuted}
+            isMuted={isMuted}
+            size={160}
+          />
+        </div>
+
+        {/* Status */}
+        <motion.p
+          animate={{ opacity: [0.4, 0.8, 0.4] }}
+          transition={{ duration: 2, repeat: Infinity }}
+          className="text-xs text-gray-500 mb-5 tracking-wide"
+        >
+          {statusText}
+        </motion.p>
+
+        {/* Controls */}
+        <div className="flex items-center gap-3">
+          <motion.button
+            whileHover={{ scale: 1.08 }}
+            whileTap={{ scale: 0.92 }}
+            onClick={toggleMute}
+            className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors cursor-pointer ${
+              isMuted ? "bg-red-500/20 ring-1 ring-red-500/30" : "bg-white/5 hover:bg-white/10"
+            }`}
+            title={isMuted ? "Unmute" : "Mute"}
+          >
+            {isMuted ? <MicOff className="w-5 h-5 text-red-400" /> : <Mic className="w-5 h-5 text-gray-400" />}
+          </motion.button>
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={endInterview}
+            className="px-5 py-3 rounded-full bg-red-500/15 text-red-400 text-sm font-medium flex items-center gap-2 hover:bg-red-500/25 transition-colors cursor-pointer ring-1 ring-red-500/20"
+          >
+            <PhoneOff className="w-4 h-4" />
+            End Interview
+          </motion.button>
+        </div>
+      </motion.div>
+
+      {/* Right panel — Conversation stream (dark) */}
+      <motion.div
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        className="flex-1 flex flex-col bg-[#0e0e18] overflow-hidden"
+      >
+        <div className="px-5 py-3 border-b border-white/5 flex items-center gap-3">
+          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Live Transcript</span>
+        </div>
         <ConversationStream
           messages={transcript}
           subtitleWords={subtitleWords}
           isAiSpeaking={isAiSpeaking}
           agentLabel="Interviewer"
+          darkMode={true}
         />
       </motion.div>
     </div>
