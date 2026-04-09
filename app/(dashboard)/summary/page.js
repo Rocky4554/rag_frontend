@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Play, Pause, Volume2, Copy, Check, Loader2, AlertCircle } from "lucide-react";
+import { Play, Pause, Volume2, Copy, Check, Loader2, AlertCircle, Download } from "lucide-react";
 import { summaryAPI } from "@/lib/api";
 import { useSession } from "@/lib/session-context";
 import { getUserFriendlyError } from "@/lib/utils";
@@ -93,6 +93,21 @@ export default function SummaryPage() {
     navigator.clipboard.writeText(summaryText);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleDownload = () => {
+    if (!audioSrc) return;
+    // Detect extension from data URI mime type
+    const mimeMatch = audioSrc.match(/^data:([^;]+);/);
+    const mime = mimeMatch?.[1] || "audio/mp3";
+    const ext = mime.includes("wav") ? "wav" : mime.includes("ogg") ? "ogg" : "mp3";
+    const baseName = (activeSession?.filename || "summary").replace(/\.[^/.]+$/, "");
+    const link = document.createElement("a");
+    link.href = audioSrc;
+    link.download = `${baseName}-summary.${ext}`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const progressPct = duration > 0 ? (currentTime / duration) * 100 : 0;
@@ -234,7 +249,15 @@ export default function SummaryPage() {
               <span className="text-xs text-text-muted font-mono">{formatTime(duration)}</span>
             </div>
 
-            <Volume2 className="w-4 h-4 text-text-muted" />
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={handleDownload}
+              title="Download audio"
+              className="w-9 h-9 rounded-full bg-bg-elevated flex items-center justify-center hover:bg-border transition-colors cursor-pointer shrink-0"
+            >
+              <Download className="w-4 h-4 text-text-secondary" />
+            </motion.button>
           </div>
         </motion.div>
       )}

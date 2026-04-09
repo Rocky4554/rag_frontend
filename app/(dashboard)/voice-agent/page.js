@@ -9,7 +9,7 @@ import { useSession } from "@/lib/session-context";
 import { registerSession, disconnectSocket } from "@/lib/socket";
 import { Room, RoomEvent, Track } from "livekit-client";
 import ConversationStream from "@/components/shared/ConversationStream";
-import { getUserFriendlyError } from "@/lib/utils";
+import { getUserFriendlyError, requestMicrophonePermission } from "@/lib/utils";
 
 export default function VoiceAgentPage() {
   const { activeSession } = useSession();
@@ -92,6 +92,9 @@ export default function VoiceAgentPage() {
     streamingIdRef.current = null;
 
     try {
+      // REQUEST MICROPHONE PERMISSION FIRST — before any room connection
+      await requestMicrophonePermission();
+
       const socket = registerSession(sessionId);
 
       socket.on("voice_transcript", (data) => {
@@ -175,12 +178,8 @@ export default function VoiceAgentPage() {
 
       await room.connect(data.url, data.token);
 
-      try {
-        await room.localParticipant.setMicrophoneEnabled(true);
-      } catch {
-        room.disconnect();
-        throw new Error("Microphone access denied. Please allow microphone permission and try again.");
-      }
+      // Microphone is already enabled from permission request, but set it again for LiveKit
+      await room.localParticipant.setMicrophoneEnabled(true);
 
       setPhase("active");
       setAgentState("listening");

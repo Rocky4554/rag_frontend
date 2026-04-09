@@ -9,7 +9,7 @@ import { registerSession, getSocket, disconnectSocket } from "@/lib/socket";
 import { Room, RoomEvent, Track } from "livekit-client";
 import ConversationStream from "@/components/shared/ConversationStream";
 import VoiceOrb from "@/components/shared/VoiceOrb";
-import { getUserFriendlyError } from "@/lib/utils";
+import { getUserFriendlyError, requestMicrophonePermission } from "@/lib/utils";
 
 export default function InterviewPage() {
   const { activeSession } = useSession();
@@ -49,6 +49,9 @@ export default function InterviewPage() {
     setTranscript([]);
 
     try {
+      // REQUEST MICROPHONE PERMISSION FIRST — before any room connection
+      await requestMicrophonePermission();
+
       // 1. Register socket for real-time events
       const socket = registerSession(sessionId);
 
@@ -142,15 +145,8 @@ export default function InterviewPage() {
 
       await room.connect(tokenData.url, tokenData.token);
 
-      // Request mic permission — handle denial gracefully
-      try {
-        await room.localParticipant.setMicrophoneEnabled(true);
-      } catch (micErr) {
-        room.disconnect();
-        throw new Error(
-          "Microphone access denied. Please allow microphone permission in your browser settings and try again."
-        );
-      }
+      // Microphone is already enabled from permission request, but set it again for LiveKit
+      await room.localParticipant.setMicrophoneEnabled(true);
 
       // Signal client ready
       socket.emit("client_audio_ready", sessionId);
