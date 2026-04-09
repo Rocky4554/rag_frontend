@@ -31,7 +31,8 @@ export default function SummaryPage() {
       const { data } = await summaryAPI.generate(sessionId);
       setSummaryText(data.summary);
       if (data.audio) {
-        setAudioSrc(`data:audio/mp3;base64,${data.audio}`);
+        const mime = data.mimeType || "audio/mp3";
+        setAudioSrc(`data:${mime};base64,${data.audio}`);
       }
     } catch (err) {
       setError(getUserFriendlyError(err, "Failed to generate the summary. Please try again."));
