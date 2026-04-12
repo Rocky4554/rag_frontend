@@ -213,7 +213,7 @@ export default function InterviewPage() {
   if (phase === "setup") {
     return (
       <div className="max-w-2xl mx-auto py-8">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+        <div>
           <h1 className="text-2xl font-bold text-text-primary mb-2">AI Interview</h1>
           <p className="text-text-muted mb-8">Practice with an AI interviewer based on your document</p>
 
@@ -270,7 +270,7 @@ export default function InterviewPage() {
               Start Interview
             </button>
           </div>
-        </motion.div>
+        </div>
       </div>
     );
   }

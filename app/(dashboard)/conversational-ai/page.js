@@ -243,38 +243,31 @@ export default function ConversationalAiPage() {
   if (phase === "idle") {
     return (
       <div className="max-w-md mx-auto py-8">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+        <div>
           <h1 className="text-2xl font-bold text-text-primary mb-2 flex items-center gap-2">
             <Radio className="w-6 h-6 text-[#7C3AED]" />
             Conversational AI
           </h1>
           <p className="text-text-muted mb-8">Real-time voice conversation powered by Gemini Live</p>
 
-          <AnimatePresence>
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: -8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                className="mb-6 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-sm text-red-400 flex items-center gap-2"
-              >
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <div className="flex flex-col gap-1">
-                  <span>{error}</span>
-                  {isMobile() && error.toLowerCase().includes("permission") && (
-                    <a 
-                      href="https://support.google.com/chrome/answer/2693767?hl=en&co=GENIE.Platform%3DAndroid" 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="text-[10px] underline opacity-80 hover:opacity-100"
-                    >
-                      Troubleshooting Guide for Android
-                    </a>
-                  )}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {error && (
+            <div className="mb-6 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-sm text-red-400 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <div className="flex flex-col gap-1">
+                <span>{error}</span>
+                {isMobile() && error.toLowerCase().includes("permission") && (
+                  <a 
+                    href="https://support.google.com/chrome/answer/2693767?hl=en&co=GENIE.Platform%3DAndroid" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-[10px] underline opacity-80 hover:opacity-100"
+                  >
+                    Troubleshooting Guide for Android
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="bg-bg-card border border-border rounded-2xl p-6 space-y-4">
             <div className="p-4 rounded-xl bg-[#7C3AED]/5 border border-[#7C3AED]/20">
@@ -290,7 +283,7 @@ export default function ConversationalAiPage() {
               Start Conversation
             </button>
           </div>
-        </motion.div>
+        </div>
       </div>
     );
   }
