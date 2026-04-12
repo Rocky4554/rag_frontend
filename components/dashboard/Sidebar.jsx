@@ -17,7 +17,7 @@ const navItems = [
   { label: "Quiz", href: "/quiz", icon: Brain },
   { label: "Voice Summary", href: "/summary", icon: AudioLines },
   { label: "AI Interview", href: "/interview", icon: Mic },
-  { label: "Voice Agent", href: "/voice-agent", icon: Radio },
+  { label: "Conversational AI", href: "/conversational-ai", icon: Radio },
 ];
 
 const bottomNavItems = [

@@ -4,14 +4,14 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mic, MicOff, PhoneOff, Radio, Loader2, AlertCircle } from "lucide-react";
 import VoiceOrb from "@/components/shared/VoiceOrb";
-import { voiceAgentAPI } from "@/lib/api";
+import { conversationalAiAPI } from "@/lib/api";
 import { useSession } from "@/lib/session-context";
 import { registerSession, disconnectSocket } from "@/lib/socket";
 import { Room, RoomEvent, Track } from "livekit-client";
 import ConversationStream from "@/components/shared/ConversationStream";
 import { getUserFriendlyError, requestMicrophonePermission } from "@/lib/utils";
 
-export default function VoiceAgentPage() {
+export default function ConversationalAiPage() {
   const { activeSession } = useSession();
   const sessionId = activeSession?.sessionId;
 
@@ -41,7 +41,7 @@ export default function VoiceAgentPage() {
     roomRef.current?.disconnect();
     roomRef.current = null;
     disconnectSocket();
-    if (sessionId) voiceAgentAPI.stop(sessionId).catch(() => {});
+    if (sessionId) conversationalAiAPI.stop(sessionId).catch(() => {});
     setPhase("idle");
     setAgentState("listening");
     setIsMuted(false);
@@ -131,6 +131,10 @@ export default function VoiceAgentPage() {
 
       socket.on("voice_state", (data) => {
         const state = data.state || "listening";
+        if (state === 'disconnected') {
+          endSession();
+          return;
+        }
         setAgentState(state);
         // When AI starts speaking, finalize any open user message
         if (state === "speaking" && userMsgIdRef.current) {
@@ -153,12 +157,12 @@ export default function VoiceAgentPage() {
       });
 
       socket.on("voice_error", (data) => {
-        setError(data.error || "Voice agent error");
+        setError(data.error || "Conversational AI error");
         endSession();
       });
 
       // Start backend agent + get LiveKit token
-      const { data } = await voiceAgentAPI.start(sessionId);
+      const { data } = await conversationalAiAPI.start(sessionId);
 
       const room = new Room();
       roomRef.current = room;
@@ -184,7 +188,7 @@ export default function VoiceAgentPage() {
       setPhase("active");
       setAgentState("listening");
     } catch (err) {
-      setError(getUserFriendlyError(err, "Failed to start voice session. Please try again."));
+      setError(getUserFriendlyError(err, "Failed to start Conversational AI session. Please try again."));
       setPhase("idle");
     }
   };
@@ -215,7 +219,7 @@ export default function VoiceAgentPage() {
         <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#7C3AED]/10 to-[#0EA5E9]/10 flex items-center justify-center mb-4">
           <Radio className="w-7 h-7 text-[#7C3AED]" />
         </div>
-        <h2 className="text-lg font-semibold text-text-primary mb-2">Voice Agent</h2>
+        <h2 className="text-lg font-semibold text-text-primary mb-2">Conversational AI</h2>
         <p className="text-sm text-text-muted mb-4">Upload a PDF to give the agent document context, or start directly for general chat.</p>
         <a href="/upload" className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#7C3AED] to-[#0EA5E9] text-white text-sm font-medium hover:opacity-90 transition-opacity">
           Upload Document
@@ -229,7 +233,7 @@ export default function VoiceAgentPage() {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center">
         <Loader2 className="w-8 h-8 animate-spin text-[#7C3AED] mb-4" />
-        <p className="text-text-primary font-medium">Starting voice agent...</p>
+        <p className="text-text-primary font-medium">Starting Conversational AI...</p>
         <p className="text-xs text-text-muted mt-1">Connecting to Gemini Live</p>
       </div>
     );
@@ -242,7 +246,7 @@ export default function VoiceAgentPage() {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
           <h1 className="text-2xl font-bold text-text-primary mb-2 flex items-center gap-2">
             <Radio className="w-6 h-6 text-[#7C3AED]" />
-            Voice Agent
+            Conversational AI
           </h1>
           <p className="text-text-muted mb-8">Real-time voice conversation powered by Gemini Live</p>
 
@@ -293,7 +297,7 @@ export default function VoiceAgentPage() {
         {/* Title */}
         <div className="w-full mb-4 flex items-center gap-2">
           <Radio className="w-4 h-4 text-purple-400" />
-          <span className="text-sm font-semibold text-gray-300">Voice Agent</span>
+          <span className="text-sm font-semibold text-gray-300">Conversational AI</span>
         </div>
 
         {/* Voice orb */}
@@ -355,7 +359,7 @@ export default function VoiceAgentPage() {
           messages={transcript}
           subtitleWords={subtitleWords}
           isAiSpeaking={isAiSpeaking}
-          agentLabel="Voice Agent"
+          agentLabel="Conversational AI"
           darkMode={true}
         />
       </motion.div>
