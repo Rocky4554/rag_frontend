@@ -9,7 +9,7 @@ import { useSession } from "@/lib/session-context";
 import { registerSession, disconnectSocket } from "@/lib/socket";
 import { Room, RoomEvent, Track } from "livekit-client";
 import ConversationStream from "@/components/shared/ConversationStream";
-import { getUserFriendlyError, requestMicrophonePermission } from "@/lib/utils";
+import { getUserFriendlyError, requestMicrophonePermission, isMobile } from "@/lib/utils";
 
 export default function ConversationalAiPage() {
   const { activeSession } = useSession();
@@ -259,7 +259,19 @@ export default function ConversationalAiPage() {
                 className="mb-6 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-sm text-red-400 flex items-center gap-2"
               >
                 <AlertCircle className="w-4 h-4 shrink-0" />
-                {error}
+                <div className="flex flex-col gap-1">
+                  <span>{error}</span>
+                  {isMobile() && error.toLowerCase().includes("permission") && (
+                    <a 
+                      href="https://support.google.com/chrome/answer/2693767?hl=en&co=GENIE.Platform%3DAndroid" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-[10px] underline opacity-80 hover:opacity-100"
+                    >
+                      Troubleshooting Guide for Android
+                    </a>
+                  )}
+                </div>
               </motion.div>
             )}
           </AnimatePresence>

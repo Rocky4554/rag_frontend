@@ -9,7 +9,7 @@ import { registerSession, getSocket, disconnectSocket } from "@/lib/socket";
 import { Room, RoomEvent, Track } from "livekit-client";
 import ConversationStream from "@/components/shared/ConversationStream";
 import VoiceOrb from "@/components/shared/VoiceOrb";
-import { getUserFriendlyError, requestMicrophonePermission } from "@/lib/utils";
+import { getUserFriendlyError, requestMicrophonePermission, isMobile } from "@/lib/utils";
 
 export default function InterviewPage() {
   const { activeSession } = useSession();
@@ -217,12 +217,24 @@ export default function InterviewPage() {
           <h1 className="text-2xl font-bold text-text-primary mb-2">AI Interview</h1>
           <p className="text-text-muted mb-8">Practice with an AI interviewer based on your document</p>
 
-          {error && (
-            <div className="mb-6 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-sm text-red-500 flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              {error}
-            </div>
-          )}
+            {error && (
+              <div className="mb-6 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-sm text-red-500 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <div className="flex flex-col gap-1">
+                  <span>{error}</span>
+                  {isMobile() && error.toLowerCase().includes("permission") && (
+                    <a 
+                      href="https://support.google.com/chrome/answer/2693767?hl=en&co=GENIE.Platform%3DAndroid" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-[10px] underline opacity-80 hover:opacity-100"
+                    >
+                      Troubleshooting Guide for Android
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
 
           <div className="bg-bg-card border border-border rounded-2xl p-6 space-y-5">
             <div>
