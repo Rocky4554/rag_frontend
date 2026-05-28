@@ -32,6 +32,7 @@ export default function InterviewPage() {
 
   // Refs
   const roomRef = useRef(null);
+  const transcriptIdRef = useRef(0);
   // (auto-scroll handled by ConversationStream)
 
   // Cleanup on unmount
@@ -47,6 +48,7 @@ export default function InterviewPage() {
     setPhase("connecting");
     setError("");
     setTranscript([]);
+    transcriptIdRef.current = 0;
 
     try {
       // REQUEST MICROPHONE PERMISSION FIRST — before any room connection
@@ -54,6 +56,16 @@ export default function InterviewPage() {
 
       // 1. Register socket for real-time events
       const socket = registerSession(sessionId);
+
+      // The socket is a singleton that survives across interviews. Remove any
+      // listeners left over from a previous interview before re-registering,
+      // otherwise each event fires N times (N = interviews started this mount),
+      // duplicating every transcript line.
+      socket.off("ai_subtitle");
+      socket.off("ai_speech");
+      socket.off("transcript_final");
+      socket.off("ai_feedback");
+      socket.off("interview_done");
 
       // Listen for transcript events
       // ai_speech: speech-synchronized transcript events emitted by worker.js
@@ -71,7 +83,7 @@ export default function InterviewPage() {
 
       socket.on("ai_speech", (data) => {
         if (data.action === "start") {
-          const id = Date.now();
+          const id = ++transcriptIdRef.current;
           aiSpeechRef.id = id;
           setTranscript((prev) => [
             ...prev,
@@ -103,7 +115,7 @@ export default function InterviewPage() {
         if (data.role === "user") {
           setTranscript((prev) => [
             ...prev,
-            { id: Date.now(), role: data.role, text: data.text, score: data.score },
+            { id: ++transcriptIdRef.current, role: data.role, text: data.text, score: data.score },
           ]);
           setStatusText("AI is thinking...");
         }
@@ -127,7 +139,13 @@ export default function InterviewPage() {
       // 3. Get LiveKit token and connect
       const { data: tokenData } = await tokenAPI.getLiveKitToken(sessionId);
 
-      const room = new Room();
+      const room = new Room({
+        audioCaptureDefaults: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
       roomRef.current = room;
 
       room.on(RoomEvent.TrackSubscribed, (track) => {

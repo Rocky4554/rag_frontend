@@ -26,6 +26,7 @@ export default function ConversationalAiPage() {
   const roomRef = useRef(null);
   const streamingIdRef = useRef(null);  // current AI message being built
   const userMsgIdRef = useRef(null);    // current user message being built
+  const transcriptIdRef = useRef(0);
 
   // (auto-scroll handled by ConversationStream)
 
@@ -75,7 +76,7 @@ export default function ConversationalAiPage() {
       });
     } else {
       // Start a new AI message
-      const msgId = Date.now() + Math.random();
+      const msgId = ++transcriptIdRef.current;
       streamingIdRef.current = msgId;
       updateSubtitleWords(fragment);
       setTranscript((prev) => [
@@ -90,12 +91,19 @@ export default function ConversationalAiPage() {
     setError("");
     setTranscript([]);
     streamingIdRef.current = null;
+    transcriptIdRef.current = 0;
 
     try {
       // REQUEST MICROPHONE PERMISSION FIRST — before any room connection
       await requestMicrophonePermission();
 
       const socket = registerSession(sessionId);
+
+      // Singleton socket survives across sessions — clear stale listeners first
+      // so events don't fire multiple times and duplicate the transcript.
+      socket.off("voice_transcript");
+      socket.off("voice_state");
+      socket.off("voice_error");
 
       socket.on("voice_transcript", (data) => {
         if (data.role === "ai") {
@@ -119,7 +127,7 @@ export default function ConversationalAiPage() {
               )
             );
           } else {
-            const msgId = Date.now() + Math.random();
+            const msgId = ++transcriptIdRef.current;
             userMsgIdRef.current = msgId;
             setTranscript((prev) => [
               ...prev,
@@ -164,7 +172,13 @@ export default function ConversationalAiPage() {
       // Start backend agent + get LiveKit token
       const { data } = await conversationalAiAPI.start(sessionId);
 
-      const room = new Room();
+      const room = new Room({
+        audioCaptureDefaults: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
       roomRef.current = room;
 
       room.on(RoomEvent.TrackSubscribed, (track) => {
