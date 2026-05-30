@@ -30,24 +30,89 @@ export default function ConversationalAiPage() {
 
   // (auto-scroll handled by ConversationStream)
 
+  // Web Audio Analyser Refs
+  const audioContextRef = useRef(null);
+  const analyserRef = useRef(null);
+  const animationFrameRef = useRef(null);
+  const [micVolume, setMicVolume] = useState(0);
+
+  const stopAudioAnalysis = useCallback(() => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    if (audioContextRef.current) {
+      if (audioContextRef.current.state !== "closed") {
+        audioContextRef.current.close().catch(() => {});
+      }
+      audioContextRef.current = null;
+    }
+    analyserRef.current = null;
+    setMicVolume(0);
+  }, []);
+
+  const startAudioAnalysis = useCallback((mediaStreamTrack) => {
+    try {
+      stopAudioAnalysis();
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return;
+
+      const audioContext = new AudioContextClass();
+      audioContextRef.current = audioContext;
+
+      const mediaStream = new MediaStream([mediaStreamTrack]);
+      const source = audioContext.createMediaStreamSource(mediaStream);
+
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 32;
+      analyserRef.current = analyser;
+
+      source.connect(analyser);
+
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+
+      const checkVolume = () => {
+        if (!analyserRef.current) return;
+        analyserRef.current.getByteFrequencyData(dataArray);
+
+        let sum = 0;
+        for (let i = 0; i < bufferLength; i++) {
+          sum += dataArray[i];
+        }
+        const average = sum / bufferLength;
+        const normalizedVolume = Math.min(100, Math.round((average / 128) * 100));
+        setMicVolume(normalizedVolume);
+
+        animationFrameRef.current = requestAnimationFrame(checkVolume);
+      };
+
+      checkVolume();
+    } catch (e) {
+      console.error("Failed to setup audio analysis:", e);
+    }
+  }, [stopAudioAnalysis]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       roomRef.current?.disconnect();
       disconnectSocket();
+      stopAudioAnalysis();
     };
-  }, []);
+  }, [stopAudioAnalysis]);
 
   const endSession = useCallback(async () => {
     roomRef.current?.disconnect();
     roomRef.current = null;
     disconnectSocket();
+    stopAudioAnalysis();
     if (sessionId) conversationalAiAPI.stop(sessionId).catch(() => {});
     setPhase("idle");
     setAgentState("listening");
     setIsMuted(false);
     streamingIdRef.current = null;
-  }, [sessionId]);
+  }, [sessionId, stopAudioAnalysis]);
 
   // Build synthetic subtitle words from accumulated text for Netflix effect
   const updateSubtitleWords = useCallback((fullText) => {
@@ -84,7 +149,88 @@ export default function ConversationalAiPage() {
         { id: msgId, role: "ai", text: fragment, streaming: true },
       ]);
     }
-  }, []);
+  }, [updateSubtitleWords]);
+
+  // Handle Socket Event Registrations with automatic cleanups to prevent duplicate firing or leaks
+  useEffect(() => {
+    if (!sessionId) return;
+
+    const socket = getSocket();
+
+    const handleVoiceTranscript = (data) => {
+      if (data.role === "ai") {
+        // Finalize any open user message when AI starts speaking
+        if (userMsgIdRef.current) {
+          const uid = userMsgIdRef.current;
+          userMsgIdRef.current = null;
+          setTranscript((prev) =>
+            prev.map((m) => (m.id === uid ? { ...m, streaming: false } : m))
+          );
+        }
+        appendAiText(data.text);
+      } else {
+        // Accumulate user speech fragments into one message
+        const fragment = (data.text || "").trim();
+        if (!fragment) return;
+        if (userMsgIdRef.current) {
+          setTranscript((prev) =>
+            prev.map((m) =>
+              m.id === userMsgIdRef.current ? { ...m, text: m.text + " " + fragment } : m
+            )
+          );
+        } else {
+          const msgId = ++transcriptIdRef.current;
+          userMsgIdRef.current = msgId;
+          setTranscript((prev) => [
+            ...prev,
+            { id: msgId, role: "user", text: fragment, streaming: true },
+          ]);
+        }
+      }
+    };
+
+    const handleVoiceState = (data) => {
+      const state = data.state || "listening";
+      if (state === 'disconnected') {
+        endSession();
+        return;
+      }
+      setAgentState(state);
+      // When AI starts speaking, finalize any open user message
+      if (state === "speaking" && userMsgIdRef.current) {
+        const uid = userMsgIdRef.current;
+        userMsgIdRef.current = null;
+        setTranscript((prev) =>
+          prev.map((m) => (m.id === uid ? { ...m, streaming: false } : m))
+        );
+      }
+      // When AI stops speaking, finalize the current AI streaming message
+      if (state === "listening" && streamingIdRef.current) {
+        const id = streamingIdRef.current;
+        streamingIdRef.current = null;
+        setTranscript((prev) =>
+          prev.map((m) => (m.id === id ? { ...m, streaming: false } : m))
+        );
+        setIsAiSpeaking(false);
+        setSubtitleWords([]);
+      }
+    };
+
+    const handleVoiceError = (data) => {
+      setError(data.error || "Conversational AI error");
+      endSession();
+    };
+
+    socket.on("voice_transcript", handleVoiceTranscript);
+    socket.on("voice_state", handleVoiceState);
+    socket.on("voice_error", handleVoiceError);
+
+    return () => {
+      socket.off("voice_transcript", handleVoiceTranscript);
+      socket.off("voice_state", handleVoiceState);
+      socket.off("voice_error", handleVoiceError);
+    };
+  }, [sessionId, appendAiText, endSession]);
 
   const startSession = async () => {
     setPhase("connecting");
@@ -97,77 +243,8 @@ export default function ConversationalAiPage() {
       // REQUEST MICROPHONE PERMISSION FIRST — before any room connection
       await requestMicrophonePermission();
 
-      const socket = registerSession(sessionId);
-
-      // Singleton socket survives across sessions — clear stale listeners first
-      // so events don't fire multiple times and duplicate the transcript.
-      socket.off("voice_transcript");
-      socket.off("voice_state");
-      socket.off("voice_error");
-
-      socket.on("voice_transcript", (data) => {
-        if (data.role === "ai") {
-          // Finalize any open user message when AI starts speaking
-          if (userMsgIdRef.current) {
-            const uid = userMsgIdRef.current;
-            userMsgIdRef.current = null;
-            setTranscript((prev) =>
-              prev.map((m) => (m.id === uid ? { ...m, streaming: false } : m))
-            );
-          }
-          appendAiText(data.text);
-        } else {
-          // Accumulate user speech fragments into one message
-          const fragment = (data.text || "").trim();
-          if (!fragment) return;
-          if (userMsgIdRef.current) {
-            setTranscript((prev) =>
-              prev.map((m) =>
-                m.id === userMsgIdRef.current ? { ...m, text: m.text + " " + fragment } : m
-              )
-            );
-          } else {
-            const msgId = ++transcriptIdRef.current;
-            userMsgIdRef.current = msgId;
-            setTranscript((prev) => [
-              ...prev,
-              { id: msgId, role: "user", text: fragment, streaming: true },
-            ]);
-          }
-        }
-      });
-
-      socket.on("voice_state", (data) => {
-        const state = data.state || "listening";
-        if (state === 'disconnected') {
-          endSession();
-          return;
-        }
-        setAgentState(state);
-        // When AI starts speaking, finalize any open user message
-        if (state === "speaking" && userMsgIdRef.current) {
-          const uid = userMsgIdRef.current;
-          userMsgIdRef.current = null;
-          setTranscript((prev) =>
-            prev.map((m) => (m.id === uid ? { ...m, streaming: false } : m))
-          );
-        }
-        // When AI stops speaking, finalize the current AI streaming message
-        if (state === "listening" && streamingIdRef.current) {
-          const id = streamingIdRef.current;
-          streamingIdRef.current = null;
-          setTranscript((prev) =>
-            prev.map((m) => (m.id === id ? { ...m, streaming: false } : m))
-          );
-          setIsAiSpeaking(false);
-          setSubtitleWords([]);
-        }
-      });
-
-      socket.on("voice_error", (data) => {
-        setError(data.error || "Conversational AI error");
-        endSession();
-      });
+      // 1. Register socket session and connect
+      registerSession(sessionId);
 
       // Start backend agent + get LiveKit token
       const { data } = await conversationalAiAPI.start(sessionId);
@@ -198,6 +275,22 @@ export default function ConversationalAiPage() {
 
       // Microphone is already enabled from permission request, but set it again for LiveKit
       await room.localParticipant.setMicrophoneEnabled(true);
+
+      // Set up real-time mic volume tracking for VoiceOrb feedback
+      const localAudioTrack = Array.from(room.localParticipant.audioTrackPublications.values())
+        .find(pub => pub.track)?.track;
+      
+      if (localAudioTrack?.mediaStreamTrack) {
+        startAudioAnalysis(localAudioTrack.mediaStreamTrack);
+      }
+
+      // Ensure that if track publication is slightly delayed, it gets captured
+      const handleLocalTrackPublished = (pub) => {
+        if (pub.track?.kind === Track.Kind.Audio && pub.track?.mediaStreamTrack) {
+          startAudioAnalysis(pub.track.mediaStreamTrack);
+        }
+      };
+      room.on(RoomEvent.LocalTrackPublished, handleLocalTrackPublished);
 
       setPhase("active");
       setAgentState("listening");
@@ -327,6 +420,7 @@ export default function ConversationalAiPage() {
             isListening={!aiSpeaking && !isMuted}
             isMuted={isMuted}
             size={160}
+            volume={micVolume}
           />
         </div>
 

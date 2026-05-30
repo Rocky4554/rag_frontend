@@ -33,15 +33,161 @@ export default function InterviewPage() {
   // Refs
   const roomRef = useRef(null);
   const transcriptIdRef = useRef(0);
+  const aiSpeechRef = useRef(null);
+
+  // Web Audio Analyser Refs
+  const audioContextRef = useRef(null);
+  const analyserRef = useRef(null);
+  const animationFrameRef = useRef(null);
+  const [micVolume, setMicVolume] = useState(0);
+
   // (auto-scroll handled by ConversationStream)
+
+  const stopAudioAnalysis = useCallback(() => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    if (audioContextRef.current) {
+      if (audioContextRef.current.state !== "closed") {
+        audioContextRef.current.close().catch(() => {});
+      }
+      audioContextRef.current = null;
+    }
+    analyserRef.current = null;
+    setMicVolume(0);
+  }, []);
+
+  const startAudioAnalysis = useCallback((mediaStreamTrack) => {
+    try {
+      stopAudioAnalysis();
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return;
+
+      const audioContext = new AudioContextClass();
+      audioContextRef.current = audioContext;
+
+      const mediaStream = new MediaStream([mediaStreamTrack]);
+      const source = audioContext.createMediaStreamSource(mediaStream);
+
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 32;
+      analyserRef.current = analyser;
+
+      source.connect(analyser);
+
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+
+      const checkVolume = () => {
+        if (!analyserRef.current) return;
+        analyserRef.current.getByteFrequencyData(dataArray);
+
+        let sum = 0;
+        for (let i = 0; i < bufferLength; i++) {
+          sum += dataArray[i];
+        }
+        const average = sum / bufferLength;
+        const normalizedVolume = Math.min(100, Math.round((average / 128) * 100));
+        setMicVolume(normalizedVolume);
+
+        animationFrameRef.current = requestAnimationFrame(checkVolume);
+      };
+
+      checkVolume();
+    } catch (e) {
+      console.error("Failed to setup audio analysis:", e);
+    }
+  }, [stopAudioAnalysis]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       roomRef.current?.disconnect();
       disconnectSocket();
+      stopAudioAnalysis();
     };
-  }, []);
+  }, [stopAudioAnalysis]);
+
+  // Handle Socket Event Registrations with automatic cleanups to prevent duplicate firing or leaks
+  useEffect(() => {
+    if (!sessionId) return;
+
+    const socket = getSocket();
+
+    const handleAiSubtitle = (data) => {
+      if (data.words?.length > 0) {
+        setSubtitleWords(data.words);
+        setIsAiSpeaking(true);
+      }
+    };
+
+    const handleAiSpeech = (data) => {
+      if (data.action === "start") {
+        const id = ++transcriptIdRef.current;
+        aiSpeechRef.current = id;
+        setTranscript((prev) => [
+          ...prev,
+          { id, role: "ai", text: "", streaming: true },
+        ]);
+        setStatusText("AI is speaking...");
+      } else if (data.action === "sentence" && aiSpeechRef.current) {
+        setTranscript((prev) =>
+          prev.map((m) =>
+            m.id === aiSpeechRef.current
+              ? { ...m, text: m.text ? m.text + " " + data.text : data.text }
+              : m
+          )
+        );
+      } else if (data.action === "end" && aiSpeechRef.current) {
+        setTranscript((prev) =>
+          prev.map((m) =>
+            m.id === aiSpeechRef.current ? { ...m, streaming: false } : m
+          )
+        );
+        aiSpeechRef.current = null;
+        setIsAiSpeaking(false);
+        setSubtitleWords([]);
+        setStatusText("Your turn to speak...");
+      }
+    };
+
+    const handleTranscriptFinal = (data) => {
+      if (data.role === "user") {
+        setTranscript((prev) => [
+          ...prev,
+          { id: ++transcriptIdRef.current, role: data.role, text: data.text, score: data.score },
+        ]);
+        setStatusText("AI is thinking...");
+      }
+    };
+
+    const handleAiFeedback = (data) => {
+      if (data.difficulty) setDifficulty(data.difficulty);
+      if (data.questionNumber) setQuestionNumber(data.questionNumber);
+    };
+
+    const handleInterviewDone = (data) => {
+      setFinalReport(data);
+      setPhase("done");
+      roomRef.current?.disconnect();
+      stopAudioAnalysis();
+    };
+
+    socket.on("ai_subtitle", handleAiSubtitle);
+    socket.on("ai_speech", handleAiSpeech);
+    socket.on("transcript_final", handleTranscriptFinal);
+    socket.on("ai_feedback", handleAiFeedback);
+    socket.on("interview_done", handleInterviewDone);
+
+    return () => {
+      socket.off("ai_subtitle", handleAiSubtitle);
+      socket.off("ai_speech", handleAiSpeech);
+      socket.off("transcript_final", handleTranscriptFinal);
+      socket.off("ai_feedback", handleAiFeedback);
+      socket.off("interview_done", handleInterviewDone);
+    };
+  }, [sessionId, stopAudioAnalysis]);
 
   const startInterview = async () => {
     if (!sessionId) return;
@@ -54,83 +200,8 @@ export default function InterviewPage() {
       // REQUEST MICROPHONE PERMISSION FIRST — before any room connection
       await requestMicrophonePermission();
 
-      // 1. Register socket for real-time events
+      // 1. Register socket for real-time events and connection
       const socket = registerSession(sessionId);
-
-      // The socket is a singleton that survives across interviews. Remove any
-      // listeners left over from a previous interview before re-registering,
-      // otherwise each event fires N times (N = interviews started this mount),
-      // duplicating every transcript line.
-      socket.off("ai_subtitle");
-      socket.off("ai_speech");
-      socket.off("transcript_final");
-      socket.off("ai_feedback");
-      socket.off("interview_done");
-
-      // Listen for transcript events
-      // ai_speech: speech-synchronized transcript events emitted by worker.js
-      // { action: 'start' }           — new AI turn beginning, create empty entry
-      // { action: 'sentence', text }  — one sentence finished playing, append it
-      // { action: 'end' }             — turn complete, mark entry as done
-      const aiSpeechRef = { id: null };
-
-      socket.on("ai_subtitle", (data) => {
-        if (data.words?.length > 0) {
-          setSubtitleWords(data.words);
-          setIsAiSpeaking(true);
-        }
-      });
-
-      socket.on("ai_speech", (data) => {
-        if (data.action === "start") {
-          const id = ++transcriptIdRef.current;
-          aiSpeechRef.id = id;
-          setTranscript((prev) => [
-            ...prev,
-            { id, role: "ai", text: "", streaming: true },
-          ]);
-          setStatusText("AI is speaking...");
-        } else if (data.action === "sentence" && aiSpeechRef.id) {
-          setTranscript((prev) =>
-            prev.map((m) =>
-              m.id === aiSpeechRef.id
-                ? { ...m, text: m.text ? m.text + " " + data.text : data.text }
-                : m
-            )
-          );
-        } else if (data.action === "end" && aiSpeechRef.id) {
-          setTranscript((prev) =>
-            prev.map((m) =>
-              m.id === aiSpeechRef.id ? { ...m, streaming: false } : m
-            )
-          );
-          aiSpeechRef.id = null;
-          setIsAiSpeaking(false);
-          setSubtitleWords([]);
-          setStatusText("Your turn to speak...");
-        }
-      });
-
-      socket.on("transcript_final", (data) => {
-        if (data.role === "user") {
-          setTranscript((prev) => [
-            ...prev,
-            { id: ++transcriptIdRef.current, role: data.role, text: data.text, score: data.score },
-          ]);
-          setStatusText("AI is thinking...");
-        }
-      });
-
-      socket.on("ai_feedback", (data) => {
-        if (data.difficulty) setDifficulty(data.difficulty);
-        if (data.questionNumber) setQuestionNumber(data.questionNumber);
-      });
-
-      socket.on("interview_done", (data) => {
-        setFinalReport(data);
-        setPhase("done");
-        roomRef.current?.disconnect();
-      });
 
       // 2. Start interview on backend
       const { data: interviewData } = await interviewAPI.start(sessionId, maxQuestions);
@@ -166,6 +237,22 @@ export default function InterviewPage() {
       // Microphone is already enabled from permission request, but set it again for LiveKit
       await room.localParticipant.setMicrophoneEnabled(true);
 
+      // Set up real-time mic volume tracking for VoiceOrb feedback
+      const localAudioTrack = Array.from(room.localParticipant.audioTrackPublications.values())
+        .find(pub => pub.track)?.track;
+      
+      if (localAudioTrack?.mediaStreamTrack) {
+        startAudioAnalysis(localAudioTrack.mediaStreamTrack);
+      }
+
+      // Ensure that if track publication is slightly delayed, it gets captured
+      const handleLocalTrackPublished = (pub) => {
+        if (pub.track?.kind === Track.Kind.Audio && pub.track?.mediaStreamTrack) {
+          startAudioAnalysis(pub.track.mediaStreamTrack);
+        }
+      };
+      room.on(RoomEvent.LocalTrackPublished, handleLocalTrackPublished);
+
       // Signal client ready
       socket.emit("client_audio_ready", sessionId);
 
@@ -188,8 +275,9 @@ export default function InterviewPage() {
   const endInterview = useCallback(() => {
     roomRef.current?.disconnect();
     disconnectSocket();
+    stopAudioAnalysis();
     setPhase("done");
-  }, []);
+  }, [stopAudioAnalysis]);
 
   const resetInterview = () => {
     setPhase("setup");
@@ -197,6 +285,7 @@ export default function InterviewPage() {
     setFinalReport(null);
     setQuestionNumber(0);
     setError("");
+    stopAudioAnalysis();
   };
 
   const progress = maxQuestions > 0 ? (questionNumber / maxQuestions) * 100 : 0;
@@ -439,6 +528,7 @@ export default function InterviewPage() {
             isListening={!aiSpeaking && !isMuted}
             isMuted={isMuted}
             size={160}
+            volume={micVolume}
           />
         </div>
 

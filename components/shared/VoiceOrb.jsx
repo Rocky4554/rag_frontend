@@ -20,8 +20,12 @@ export default function VoiceOrb({
   isListening = false,
   isMuted = false,
   size = 140,
+  volume = 0,
 }) {
   const half = size / 2;
+
+  // Dynamic scaling based on mic volume (only when listening and not muted)
+  const volumeScale = isListening && !isMuted ? 1 + (volume / 100) * 0.5 : 1;
 
   // Animation states
   const orbVariants = {
@@ -60,7 +64,9 @@ export default function VoiceOrb({
         : "idle";
 
   return (
-    <div
+    <motion.div
+      animate={{ scale: volumeScale }}
+      transition={{ type: "spring", stiffness: 350, damping: 25 }}
       className="relative flex items-center justify-center"
       style={{ width: size + 40, height: size + 40 }}
     >
@@ -142,6 +148,6 @@ export default function VoiceOrb({
           filter: "blur(4px)",
         }}
       />
-    </div>
+    </motion.div>
   );
 }
