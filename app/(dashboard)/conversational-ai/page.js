@@ -6,7 +6,7 @@ import { Mic, MicOff, PhoneOff, Radio, Loader2, AlertCircle } from "lucide-react
 import VoiceOrb from "@/components/shared/VoiceOrb";
 import { conversationalAiAPI } from "@/lib/api";
 import { useSession } from "@/lib/session-context";
-import { registerSession, disconnectSocket } from "@/lib/socket";
+import { registerSession, getSocket, disconnectSocket } from "@/lib/socket";
 import { Room, RoomEvent, Track } from "livekit-client";
 import ConversationStream from "@/components/shared/ConversationStream";
 import { getUserFriendlyError, requestMicrophonePermission, isMobile } from "@/lib/utils";
