@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mic, MicOff, PhoneOff, Radio, Loader2, AlertCircle } from "lucide-react";
 import VoiceOrb from "@/components/shared/VoiceOrb";
+import DotGridVisualizer from "@/components/shared/DotGridVisualizer";
 import { conversationalAiAPI } from "@/lib/api";
 import { useSession } from "@/lib/session-context";
 import { registerSession, getSocket, disconnectSocket } from "@/lib/socket";
@@ -22,6 +23,7 @@ export default function ConversationalAiPage() {
   const [error, setError] = useState("");
   const [subtitleWords, setSubtitleWords] = useState([]);
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
+  const [agentTrack, setAgentTrack] = useState(null); // AI audio track for the visualizer
 
   const roomRef = useRef(null);
   const streamingIdRef = useRef(null);  // current AI message being built
@@ -107,6 +109,7 @@ export default function ConversationalAiPage() {
     roomRef.current = null;
     disconnectSocket();
     stopAudioAnalysis();
+    setAgentTrack(null);
     if (sessionId) conversationalAiAPI.stop(sessionId).catch(() => {});
     setPhase("idle");
     setAgentState("listening");
@@ -263,10 +266,13 @@ export default function ConversationalAiPage() {
           const el = track.attach();
           el.autoplay = true;
           document.body.appendChild(el);
+          // Feed the AI's audio track to the dot-grid visualizer
+          if (track.mediaStreamTrack) setAgentTrack(track.mediaStreamTrack);
         }
       });
 
       room.on(RoomEvent.Disconnected, () => {
+        setAgentTrack(null);
         setPhase("idle");
         setAgentState("listening");
       });
@@ -412,15 +418,12 @@ export default function ConversationalAiPage() {
           <span className="text-sm font-semibold text-gray-300">Conversational AI</span>
         </div>
 
-        {/* Voice orb */}
+        {/* Agent voice visualizer — LiveKit-style dot grid */}
         <div className="flex-1 flex items-center justify-center">
-          <VoiceOrb
-            isActive={true}
+          <DotGridVisualizer
+            track={agentTrack}
             isSpeaking={aiSpeaking}
-            isListening={!aiSpeaking && !isMuted}
-            isMuted={isMuted}
-            size={160}
-            volume={micVolume}
+            size={200}
           />
         </div>
 

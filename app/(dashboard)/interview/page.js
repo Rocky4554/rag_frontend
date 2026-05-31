@@ -9,6 +9,7 @@ import { registerSession, getSocket, disconnectSocket } from "@/lib/socket";
 import { Room, RoomEvent, Track } from "livekit-client";
 import ConversationStream from "@/components/shared/ConversationStream";
 import VoiceOrb from "@/components/shared/VoiceOrb";
+import DotGridVisualizer from "@/components/shared/DotGridVisualizer";
 import { getUserFriendlyError, requestMicrophonePermission, isMobile } from "@/lib/utils";
 
 export default function InterviewPage() {
@@ -29,6 +30,7 @@ export default function InterviewPage() {
   const [statusText, setStatusText] = useState("Connecting...");
   const [subtitleWords, setSubtitleWords] = useState([]);
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
+  const [agentTrack, setAgentTrack] = useState(null); // AI audio track for the visualizer
 
   // Refs
   const roomRef = useRef(null);
@@ -223,10 +225,13 @@ export default function InterviewPage() {
         if (track.kind === Track.Kind.Audio) {
           const el = track.attach();
           document.body.appendChild(el);
+          // Feed the AI's audio track to the dot-grid visualizer
+          if (track.mediaStreamTrack) setAgentTrack(track.mediaStreamTrack);
         }
       });
 
       room.on(RoomEvent.Disconnected, () => {
+        setAgentTrack(null);
         if (phase !== "done") {
           setStatusText("Disconnected");
         }
@@ -520,15 +525,12 @@ export default function InterviewPage() {
           </div>
         </div>
 
-        {/* Voice orb */}
+        {/* Agent voice visualizer — LiveKit-style dot grid */}
         <div className="flex-1 flex items-center justify-center">
-          <VoiceOrb
-            isActive={true}
+          <DotGridVisualizer
+            track={agentTrack}
             isSpeaking={aiSpeaking}
-            isListening={!aiSpeaking && !isMuted}
-            isMuted={isMuted}
-            size={160}
-            volume={micVolume}
+            size={200}
           />
         </div>
 
