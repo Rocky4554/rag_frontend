@@ -85,7 +85,7 @@ export default function UploadPage() {
       return "Unsupported file type. Please upload a PDF or image file.";
     }
     if (f.size > MAX_SIZE_MB * 1024 * 1024) {
-      return `File size exceeds ${MAX_SIZE_MB}MB limit.`;
+      return `File is too large (${(f.size / 1024 / 1024).toFixed(1)}MB). Maximum allowed size is ${MAX_SIZE_MB}MB — please upload a smaller file.`;
     }
     return null;
   }, []);
