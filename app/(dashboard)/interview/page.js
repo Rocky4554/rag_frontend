@@ -379,7 +379,7 @@ export default function InterviewPage() {
             </div>
 
             <button
-              onClick={startInterview}
+              onClick={() => startInterview()}
               className="w-full py-3.5 rounded-xl bg-gradient-to-r from-[#7C3AED] to-[#0EA5E9] text-white font-medium flex items-center justify-center gap-2 hover:opacity-90 transition-opacity cursor-pointer"
             >
               <Play className="w-4 h-4" />
