@@ -191,7 +191,7 @@ export default function InterviewPage() {
     };
   }, [sessionId, stopAudioAnalysis]);
 
-  const startInterview = async () => {
+  const startInterview = async (forceNew = false) => {
     if (!sessionId) return;
     setPhase("connecting");
     setError("");
@@ -206,8 +206,12 @@ export default function InterviewPage() {
       const socket = registerSession(sessionId);
 
       // 2. Start interview on backend
-      const { data: interviewData } = await interviewAPI.start(sessionId, maxQuestions);
+      const { data: interviewData } = await interviewAPI.start(sessionId, maxQuestions, forceNew);
       setDifficulty(interviewData.difficulty || "medium");
+      // On resume the interview continues from wherever it left off — sync
+      // the progress bar to the real question count instead of showing 0.
+      setQuestionNumber(interviewData.questionNumber || 0);
+      if (interviewData.maxQuestions) setMaxQuestions(interviewData.maxQuestions);
 
       // 3. Get LiveKit token and connect
       const { data: tokenData } = await tokenAPI.getLiveKitToken(sessionId);
@@ -479,10 +483,24 @@ export default function InterviewPage() {
             </div>
           ) : (
             <div className="text-center">
-              <p className="text-text-muted mb-4">Interview ended without a report.</p>
-              <button onClick={resetInterview} className="px-6 py-3 rounded-xl bg-gradient-to-r from-[#7C3AED] to-[#0EA5E9] text-white font-medium cursor-pointer">
-                Try Again
-              </button>
+              <p className="text-text-muted mb-2">
+                Interview ended before finishing{questionNumber > 0 ? ` — you answered ${questionNumber} of ${maxQuestions} question${maxQuestions === 1 ? "" : "s"}.` : "."}
+              </p>
+              <p className="text-xs text-text-muted mb-5">You can pick up where you left off, or start over.</p>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <button
+                  onClick={() => startInterview(false)}
+                  className="px-6 py-3 rounded-xl bg-gradient-to-r from-[#7C3AED] to-[#0EA5E9] text-white font-medium cursor-pointer"
+                >
+                  Resume Interview
+                </button>
+                <button
+                  onClick={() => startInterview(true)}
+                  className="px-6 py-3 rounded-xl border border-border text-text-primary font-medium hover:bg-bg-elevated transition-colors cursor-pointer"
+                >
+                  Start New Interview
+                </button>
+              </div>
             </div>
           )}
         </motion.div>
