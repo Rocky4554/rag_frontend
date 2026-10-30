@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowRight, CheckCircle2, XCircle, Loader2, AlertCircle, RotateCcw, Trophy } from "lucide-react";
 import { quizAPI } from "@/lib/api";
@@ -27,12 +27,29 @@ export default function QuizPage() {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
 
+  // Track the current session so a slow response for a previous document is ignored
+  const sessionIdRef = useRef(sessionId);
+  useEffect(() => {
+    sessionIdRef.current = sessionId;
+    // Reset per-session state when the document changes
+    setQuestions([]);
+    setCurrentIndex(0);
+    setSelected(null);
+    setShowAnswer(false);
+    setScore(0);
+    setQuizDone(false);
+    setGenerating(false);
+    setError("");
+  }, [sessionId]);
+
   const generateQuiz = async () => {
     if (!sessionId) return;
+    const requestedFor = sessionId;
     setGenerating(true);
     setError("");
     try {
       const { data } = await quizAPI.generate(sessionId, topic, numQuestions);
+      if (sessionIdRef.current !== requestedFor) return;
       // Backend returns { quiz: [...] } with correctAnswer as index and prefixed options
       const normalized = (data.quiz || data.questions || []).map((q) => {
         // Strip "A) ", "B) " etc. prefixes from options if present
@@ -56,9 +73,10 @@ export default function QuizPage() {
       setScore(0);
       setQuizDone(false);
     } catch (err) {
+      if (sessionIdRef.current !== requestedFor) return;
       setError(getUserFriendlyError(err, "Failed to generate the quiz. Please try again."));
     } finally {
-      setGenerating(false);
+      if (sessionIdRef.current === requestedFor) setGenerating(false);
     }
   };
 

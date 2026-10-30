@@ -194,6 +194,7 @@ export default function DocumentSwitcher({ open, onClose }) {
     setUploadError("");
     try {
       const { data } = await uploadAPI.uploadPDF(file, (e) => {
+        if (!e.total) return; // total is undefined when length is unknown
         setProgress(Math.round((e.loaded * 100) / e.total));
       });
       setSession({

@@ -10,13 +10,14 @@ import { Room, RoomEvent, Track } from "livekit-client";
 import ConversationStream from "@/components/shared/ConversationStream";
 import VoiceOrb from "@/components/shared/VoiceOrb";
 import DotGridVisualizer from "@/components/shared/DotGridVisualizer";
+import { teardownRoom } from "@/lib/voice-room";
 import { getUserFriendlyError, requestMicrophonePermission, isMobile } from "@/lib/utils";
 
 export default function InterviewPage() {
   const { activeSession } = useSession();
   const sessionId = activeSession?.sessionId;
 
-  // Interview phases: setup | connecting | active | done
+  // Interview phases: setup | connecting | active | ending | done
   const [phase, setPhase] = useState("setup");
   const [maxQuestions, setMaxQuestions] = useState(5);
 
@@ -36,6 +37,12 @@ export default function InterviewPage() {
   const roomRef = useRef(null);
   const transcriptIdRef = useRef(0);
   const aiSpeechRef = useRef(null);
+  const phaseRef = useRef("setup"); // mirrors `phase` for use inside long-lived handlers
+  const cancelledRef = useRef(false); // set on unmount so an in-flight start aborts
+  const audioElsRef = useRef([]); // <audio> elements created by track.attach()
+  const endTimeoutRef = useRef(null); // fallback if interview_done never arrives
+  const runningAgentRef = useRef(null); // sessionId whose backend agent we started and haven't ended
+  const awaitingOutroRef = useRef(false); // interview_done received; tear down when the outro speech ends
 
   // Web Audio Analyser Refs
   const audioContextRef = useRef(null);
@@ -102,14 +109,38 @@ export default function InterviewPage() {
     }
   }, [stopAudioAnalysis]);
 
+  const changePhase = useCallback((next) => {
+    phaseRef.current = next;
+    setPhase(next);
+  }, []);
+
+  // Single place that releases the room, mic, audio elements and socket
+  const teardown = useCallback(() => {
+    if (endTimeoutRef.current) {
+      clearTimeout(endTimeoutRef.current);
+      endTimeoutRef.current = null;
+    }
+    // Leaving mid-interview: shut the backend agent down (it stays resumable)
+    if (runningAgentRef.current) {
+      interviewAPI.stop(runningAgentRef.current, false).catch(() => {});
+      runningAgentRef.current = null;
+    }
+    const room = roomRef.current;
+    roomRef.current = null;
+    teardownRoom(room, audioElsRef.current);
+    disconnectSocket();
+    stopAudioAnalysis();
+    setAgentTrack(null);
+  }, [stopAudioAnalysis]);
+
   // Cleanup on unmount
   useEffect(() => {
+    cancelledRef.current = false;
     return () => {
-      roomRef.current?.disconnect();
-      disconnectSocket();
-      stopAudioAnalysis();
+      cancelledRef.current = true;
+      teardown();
     };
-  }, [stopAudioAnalysis]);
+  }, [teardown]);
 
   // Handle Socket Event Registrations with automatic cleanups to prevent duplicate firing or leaks
   useEffect(() => {
@@ -152,6 +183,12 @@ export default function InterviewPage() {
         setSubtitleWords([]);
         setStatusText("Your turn to speak...");
       }
+
+      // Outro finished after interview_done — now release the room, mic and socket
+      if (data.action === "end" && awaitingOutroRef.current) {
+        awaitingOutroRef.current = false;
+        teardown();
+      }
     };
 
     const handleTranscriptFinal = (data) => {
@@ -170,10 +207,17 @@ export default function InterviewPage() {
     };
 
     const handleInterviewDone = (data) => {
+      runningAgentRef.current = null; // agent finishes on its own (outro, then stop)
       setFinalReport(data);
-      setPhase("done");
-      roomRef.current?.disconnect();
-      stopAudioAnalysis();
+      changePhase("done");
+      // The outro is spoken after this event — keep the room up until it ends
+      if (endTimeoutRef.current) clearTimeout(endTimeoutRef.current);
+      awaitingOutroRef.current = true;
+      endTimeoutRef.current = setTimeout(() => {
+        endTimeoutRef.current = null;
+        awaitingOutroRef.current = false;
+        teardown();
+      }, 20000);
     };
 
     socket.on("ai_subtitle", handleAiSubtitle);
@@ -189,11 +233,12 @@ export default function InterviewPage() {
       socket.off("ai_feedback", handleAiFeedback);
       socket.off("interview_done", handleInterviewDone);
     };
-  }, [sessionId, stopAudioAnalysis]);
+  }, [sessionId, changePhase, teardown]);
 
   const startInterview = async () => {
     if (!sessionId) return;
-    setPhase("connecting");
+    cancelledRef.current = false;
+    changePhase("connecting");
     setError("");
     setTranscript([]);
     transcriptIdRef.current = 0;
@@ -201,16 +246,26 @@ export default function InterviewPage() {
     try {
       // REQUEST MICROPHONE PERMISSION FIRST — before any room connection
       await requestMicrophonePermission();
+      if (cancelledRef.current) return;
 
       // 1. Register socket for real-time events and connection
       const socket = registerSession(sessionId);
 
       // 2. Start interview on backend
       const { data: interviewData } = await interviewAPI.start(sessionId, maxQuestions);
+      runningAgentRef.current = sessionId;
+      if (cancelledRef.current) {
+        teardown();
+        return;
+      }
       setDifficulty(interviewData.difficulty || "medium");
 
       // 3. Get LiveKit token and connect
       const { data: tokenData } = await tokenAPI.getLiveKitToken(sessionId);
+      if (cancelledRef.current) {
+        teardown();
+        return;
+      }
 
       const room = new Room({
         audioCaptureDefaults: {
@@ -225,6 +280,7 @@ export default function InterviewPage() {
         if (track.kind === Track.Kind.Audio) {
           const el = track.attach();
           document.body.appendChild(el);
+          audioElsRef.current.push(el);
           // Feed the AI's audio track to the dot-grid visualizer
           if (track.mediaStreamTrack) setAgentTrack(track.mediaStreamTrack);
         }
@@ -232,15 +288,23 @@ export default function InterviewPage() {
 
       room.on(RoomEvent.Disconnected, () => {
         setAgentTrack(null);
-        if (phase !== "done") {
+        if (phaseRef.current !== "done") {
           setStatusText("Disconnected");
         }
       });
 
       await room.connect(tokenData.url, tokenData.token);
+      if (cancelledRef.current) {
+        teardown();
+        return;
+      }
 
       // Microphone is already enabled from permission request, but set it again for LiveKit
       await room.localParticipant.setMicrophoneEnabled(true);
+      if (cancelledRef.current) {
+        teardown();
+        return;
+      }
 
       // Set up real-time mic volume tracking for VoiceOrb feedback
       const localAudioTrack = Array.from(room.localParticipant.audioTrackPublications.values())
@@ -261,11 +325,14 @@ export default function InterviewPage() {
       // Signal client ready
       socket.emit("client_audio_ready", sessionId);
 
-      setPhase("active");
+      changePhase("active");
       setStatusText("AI is preparing first question...");
     } catch (err) {
+      // Anything that failed after the room/socket came up must be released too
+      teardown();
+      if (cancelledRef.current) return;
       setError(getUserFriendlyError(err, "Failed to start the interview. Please try again."));
-      setPhase("setup");
+      changePhase("setup");
     }
   };
 
@@ -277,15 +344,32 @@ export default function InterviewPage() {
     }
   }, [isMuted]);
 
+  // Ask the backend to end the interview; it generates the report and emits
+  // `interview_done`. Keep the socket and room open, stop sending audio, and
+  // wait for it (with a timeout fallback).
   const endInterview = useCallback(() => {
-    roomRef.current?.disconnect();
-    disconnectSocket();
-    stopAudioAnalysis();
-    setPhase("done");
-  }, [stopAudioAnalysis]);
+    if (phaseRef.current !== "active") return;
+    changePhase("ending");
+    setStatusText("Wrapping up — generating your report...");
+    roomRef.current?.localParticipant?.setMicrophoneEnabled(false)?.catch?.(() => {});
+    if (runningAgentRef.current) {
+      interviewAPI.stop(runningAgentRef.current).catch(() => {});
+      runningAgentRef.current = null;
+    }
+    endTimeoutRef.current = setTimeout(() => {
+      endTimeoutRef.current = null;
+      changePhase("done");
+      teardown();
+    }, 30000); // final-report generation is an LLM call — allow for it
+  }, [changePhase, teardown]);
 
   const resetInterview = () => {
-    setPhase("setup");
+    // Still playing the previous outro: release it now, before a new interview can start
+    if (awaitingOutroRef.current) {
+      awaitingOutroRef.current = false;
+      teardown();
+    }
+    changePhase("setup");
     setTranscript([]);
     setFinalReport(null);
     setQuestionNumber(0);
@@ -549,6 +633,7 @@ export default function InterviewPage() {
             whileHover={{ scale: 1.08 }}
             whileTap={{ scale: 0.92 }}
             onClick={toggleMute}
+            disabled={phase === "ending"}
             className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors cursor-pointer ${
               isMuted ? "bg-red-500/20 ring-1 ring-red-500/30" : "bg-white/5 hover:bg-white/10"
             }`}
@@ -560,10 +645,11 @@ export default function InterviewPage() {
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={endInterview}
+            disabled={phase === "ending"}
             className="px-5 py-3 rounded-full bg-red-500/15 text-red-400 text-sm font-medium flex items-center gap-2 hover:bg-red-500/25 transition-colors cursor-pointer ring-1 ring-red-500/20"
           >
             <PhoneOff className="w-4 h-4" />
-            End Interview
+            {phase === "ending" ? "Ending..." : "End Interview"}
           </motion.button>
         </div>
       </motion.div>

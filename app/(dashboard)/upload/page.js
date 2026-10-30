@@ -140,6 +140,7 @@ export default function UploadPage() {
 
     try {
       const { data } = await uploadAPI.uploadFile(file, (progressEvent) => {
+        if (!progressEvent.total) return; // total is undefined when length is unknown
         const pct = Math.round(
           (progressEvent.loaded * 100) / progressEvent.total
         );

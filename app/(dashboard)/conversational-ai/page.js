@@ -10,6 +10,7 @@ import { useSession } from "@/lib/session-context";
 import { registerSession, getSocket, disconnectSocket } from "@/lib/socket";
 import { Room, RoomEvent, Track } from "livekit-client";
 import ConversationStream from "@/components/shared/ConversationStream";
+import { teardownRoom } from "@/lib/voice-room";
 import { getUserFriendlyError, requestMicrophonePermission, isMobile } from "@/lib/utils";
 
 export default function ConversationalAiPage() {
@@ -27,8 +28,12 @@ export default function ConversationalAiPage() {
 
   const roomRef = useRef(null);
   const streamingIdRef = useRef(null);  // current AI message being built
+  const streamingTextRef = useRef(""); // full text of the AI message being built
   const userMsgIdRef = useRef(null);    // current user message being built
   const transcriptIdRef = useRef(0);
+  const cancelledRef = useRef(false); // set on unmount so an in-flight start aborts
+  const audioElsRef = useRef([]); // <audio> elements created by track.attach()
+  const agentSessionRef = useRef(null); // sessionId whose backend agent we started
 
   // (auto-scroll handled by ConversationStream)
 
@@ -95,27 +100,35 @@ export default function ConversationalAiPage() {
     }
   }, [stopAudioAnalysis]);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      roomRef.current?.disconnect();
-      disconnectSocket();
-      stopAudioAnalysis();
-    };
-  }, [stopAudioAnalysis]);
-
-  const endSession = useCallback(async () => {
-    roomRef.current?.disconnect();
+  // Single place that releases the room, mic, audio elements, socket and backend agent
+  const teardown = useCallback(() => {
+    const room = roomRef.current;
     roomRef.current = null;
+    teardownRoom(room, audioElsRef.current);
     disconnectSocket();
     stopAudioAnalysis();
     setAgentTrack(null);
-    if (sessionId) conversationalAiAPI.stop(sessionId).catch(() => {});
+    const agentSessionId = agentSessionRef.current;
+    agentSessionRef.current = null;
+    if (agentSessionId) conversationalAiAPI.stop(agentSessionId).catch(() => {});
+  }, [stopAudioAnalysis]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    cancelledRef.current = false;
+    return () => {
+      cancelledRef.current = true;
+      teardown();
+    };
+  }, [teardown]);
+
+  const endSession = useCallback(async () => {
+    teardown();
     setPhase("idle");
     setAgentState("listening");
     setIsMuted(false);
     streamingIdRef.current = null;
-  }, [sessionId, stopAudioAnalysis]);
+  }, [teardown]);
 
   // Build synthetic subtitle words from accumulated text for Netflix effect
   const updateSubtitleWords = useCallback((fullText) => {
@@ -133,19 +146,19 @@ export default function ConversationalAiPage() {
     const currentId = streamingIdRef.current;
     if (currentId) {
       // Append to existing streaming message with a space separator
-      setTranscript((prev) => {
-        const updated = prev.map((m) =>
+      // Keep the accumulated text in a ref so the subtitle update stays out of the state updater
+      streamingTextRef.current = streamingTextRef.current + " " + fragment;
+      updateSubtitleWords(streamingTextRef.current);
+      setTranscript((prev) =>
+        prev.map((m) =>
           m.id === currentId ? { ...m, text: m.text + " " + fragment } : m
-        );
-        // Update Netflix subtitle words with the full accumulated text
-        const msg = updated.find((m) => m.id === currentId);
-        if (msg) updateSubtitleWords(msg.text);
-        return updated;
-      });
+        )
+      );
     } else {
       // Start a new AI message
       const msgId = ++transcriptIdRef.current;
       streamingIdRef.current = msgId;
+      streamingTextRef.current = fragment;
       updateSubtitleWords(fragment);
       setTranscript((prev) => [
         ...prev,
@@ -236,21 +249,29 @@ export default function ConversationalAiPage() {
   }, [sessionId, appendAiText, endSession]);
 
   const startSession = async () => {
+    cancelledRef.current = false;
     setPhase("connecting");
     setError("");
     setTranscript([]);
     streamingIdRef.current = null;
+    streamingTextRef.current = "";
     transcriptIdRef.current = 0;
 
     try {
       // REQUEST MICROPHONE PERMISSION FIRST — before any room connection
       await requestMicrophonePermission();
+      if (cancelledRef.current) return;
 
       // 1. Register socket session and connect
       registerSession(sessionId);
 
-      // Start backend agent + get LiveKit token
+      // Start backend agent + get LiveKit token (mark first: the request may already be in flight when we tear down)
+      agentSessionRef.current = sessionId;
       const { data } = await conversationalAiAPI.start(sessionId);
+      if (cancelledRef.current) {
+        teardown();
+        return;
+      }
 
       const room = new Room({
         audioCaptureDefaults: {
@@ -266,21 +287,32 @@ export default function ConversationalAiPage() {
           const el = track.attach();
           el.autoplay = true;
           document.body.appendChild(el);
+          audioElsRef.current.push(el);
           // Feed the AI's audio track to the dot-grid visualizer
           if (track.mediaStreamTrack) setAgentTrack(track.mediaStreamTrack);
         }
       });
 
       room.on(RoomEvent.Disconnected, () => {
+        // Release mic/audio/agent if the room dropped on its own (skipped when teardown() started it)
+        if (roomRef.current === room) teardown();
         setAgentTrack(null);
         setPhase("idle");
         setAgentState("listening");
       });
 
       await room.connect(data.url, data.token);
+      if (cancelledRef.current) {
+        teardown();
+        return;
+      }
 
       // Microphone is already enabled from permission request, but set it again for LiveKit
       await room.localParticipant.setMicrophoneEnabled(true);
+      if (cancelledRef.current) {
+        teardown();
+        return;
+      }
 
       // Set up real-time mic volume tracking for VoiceOrb feedback
       const localAudioTrack = Array.from(room.localParticipant.audioTrackPublications.values())
@@ -301,6 +333,9 @@ export default function ConversationalAiPage() {
       setPhase("active");
       setAgentState("listening");
     } catch (err) {
+      // Anything that failed after the room/socket/agent came up must be released too
+      teardown();
+      if (cancelledRef.current) return;
       setError(getUserFriendlyError(err, "Failed to start Conversational AI session. Please try again."));
       setPhase("idle");
     }

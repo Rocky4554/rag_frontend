@@ -23,21 +23,38 @@ export default function SummaryPage() {
   const [copied, setCopied] = useState(false);
   const audioRef = useRef(null);
 
+  // Track the current session so a slow response for a previous document is ignored
+  const sessionIdRef = useRef(sessionId);
+  useEffect(() => {
+    sessionIdRef.current = sessionId;
+    // Reset per-session state when the document changes
+    setSummaryText("");
+    setAudioSrc(null);
+    setLoading(false);
+    setError("");
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+  }, [sessionId]);
+
   const generateSummary = useCallback(async () => {
     if (!sessionId) return;
+    const requestedFor = sessionId;
     setLoading(true);
     setError("");
     try {
       const { data } = await summaryAPI.generate(sessionId);
+      if (sessionIdRef.current !== requestedFor) return;
       setSummaryText(data.summary);
       if (data.audio) {
         const mime = data.mimeType || "audio/mp3";
         setAudioSrc(`data:${mime};base64,${data.audio}`);
       }
     } catch (err) {
+      if (sessionIdRef.current !== requestedFor) return;
       setError(getUserFriendlyError(err, "Failed to generate the summary. Please try again."));
     } finally {
-      setLoading(false);
+      if (sessionIdRef.current === requestedFor) setLoading(false);
     }
   }, [sessionId]);
 
@@ -63,14 +80,22 @@ export default function SummaryPage() {
     };
   }, [audioSrc]);
 
-  const togglePlay = () => {
-    if (!audioRef.current) return;
+  const togglePlay = async () => {
+    const audio = audioRef.current;
+    if (!audio) return;
     if (isPlaying) {
-      audioRef.current.pause();
-    } else {
-      audioRef.current.play();
+      audio.pause();
+      setIsPlaying(false);
+      return;
     }
-    setIsPlaying(!isPlaying);
+    try {
+      await audio.play();
+      setIsPlaying(true);
+    } catch {
+      // Autoplay blocked or decode failure — leave the UI in the paused state
+      setIsPlaying(false);
+      setError("Couldn't play the audio. Please try again.");
+    }
   };
 
   const handleSeek = (e) => {

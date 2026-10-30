@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-RAG (Retrieval-Augmented Generation) frontend built with Next.js 16, React 19, and Tailwind CSS 4. Currently a fresh scaffold — the app will serve as the UI for a RAG system.
+RAG (Retrieval-Augmented Generation) frontend built with Next.js 16, React 19, and Tailwind CSS 4 — the UI for the Express backend in `../Rag_Project-` (cookie JWT auth, Socket.io, LiveKit voice, SSE chat streaming). Pages: landing, auth, and dashboard (upload, chat, summary, quiz, interview, conversational-ai, history, profile). API calls go through `lib/api.js` (axios with 401 → refresh → retry; `chatAPI.sendStream` does the same for raw-fetch SSE); sockets through `lib/socket.js`.
 
 ## Commands
 
@@ -17,7 +17,7 @@ RAG (Retrieval-Augmented Generation) frontend built with Next.js 16, React 19, a
 ## Tech Stack & Key Details
 
 - **Next.js 16.2.1** with App Router (`app/` directory). This is a newer version — always consult `node_modules/next/dist/docs/` before using Next.js APIs, as conventions may differ from older versions.
-- **React 19** with React Compiler enabled (`reactCompiler: true` in `next.config.mjs`)
+- **React 19**; React Compiler is installed but disabled (`reactCompiler: false` in `next.config.mjs`)
 - **Tailwind CSS 4** via `@tailwindcss/postcss` plugin (PostCSS-based, no `tailwind.config.js`)
 - **JavaScript** (not TypeScript), using jsconfig.json for path aliases
 - Fonts: Geist and Geist Mono loaded via `next/font/google`

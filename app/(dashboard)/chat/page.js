@@ -19,18 +19,30 @@ export default function ChatPage() {
   const { user } = useAuth();
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
+  const abortRef = useRef(null); // AbortController for the in-flight stream
+  const rafRef = useRef(null); // pending requestAnimationFrame id for token flushing
 
   const sessionId = activeSession?.sessionId;
 
   // Load chat history on mount
   useEffect(() => {
+    // Reset per-session state so a previous document's chat never leaks into this one
+    setMessages([]);
+    setError("");
+    setIsLoading(false);
+    setStreamingMsgId(null);
+
     if (!sessionId) {
       setLoadingHistory(false);
       return;
     }
 
+    let cancelled = false;
+    setLoadingHistory(true);
+
     chatAPI.getHistory(sessionId)
       .then(({ data }) => {
+        if (cancelled) return;
         if (data.history?.length) {
           setMessages(
             data.history.map((msg, i) => ({
@@ -49,19 +61,37 @@ export default function ChatPage() {
         }
       })
       .catch(() => {
+        if (cancelled) return;
         setMessages([{
           id: "welcome",
           role: "ai",
           content: `Hello! I've analyzed your document **${activeSession.filename}**. Ask me anything about it!`,
         }]);
       })
-      .finally(() => setLoadingHistory(false));
+      .finally(() => {
+        if (!cancelled) setLoadingHistory(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [sessionId, activeSession?.filename]);
 
-  // Auto-scroll to bottom
+  // Abort any in-flight stream (and pending token flush) on unmount or session change
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    return () => {
+      abortRef.current?.abort();
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    };
+  }, [sessionId]);
+
+  // Auto-scroll to bottom (instant while streaming — smooth scrolling per token is janky)
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({
+      behavior: streamingMsgId ? "auto" : "smooth",
+    });
+  }, [messages, streamingMsgId]);
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
@@ -80,9 +110,35 @@ export default function ChatPage() {
     if (textareaRef.current) textareaRef.current.style.height = "auto";
 
     const aiMsgId = Date.now() + 1;
+    const controller = new AbortController();
+    abortRef.current = controller;
 
+    // Tokens are buffered and flushed at most once per animation frame
+    let pending = "";
+    let created = false;
+    const flush = () => {
+      rafRef.current = null;
+      if (!pending || controller.signal.aborted) return;
+      const chunk = pending;
+      pending = "";
+      if (!created) {
+        // First token — add the AI message to the list
+        created = true;
+        setMessages((prev) => [...prev, { id: aiMsgId, role: "ai", content: chunk }]);
+        setStreamingMsgId(aiMsgId);
+      } else {
+        setMessages((prev) =>
+          prev.map((m) => (m.id === aiMsgId ? { ...m, content: m.content + chunk } : m))
+        );
+      }
+    };
+    const scheduleFlush = () => {
+      if (rafRef.current == null) rafRef.current = requestAnimationFrame(flush);
+    };
+
+    let receivedToken = false;
     try {
-      const res = await chatAPI.sendStream(sessionId, userMsg.content);
+      const res = await chatAPI.sendStream(sessionId, userMsg.content, controller.signal);
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         throw new Error(errData.error || "Failed to get response");
@@ -91,9 +147,9 @@ export default function ChatPage() {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
-      let firstToken = true;
+      let finished = false;
 
-      while (true) {
+      while (!finished) {
         const { done, value } = await reader.read();
         if (done) break;
 
@@ -105,40 +161,39 @@ export default function ChatPage() {
           if (!line.startsWith("data: ")) continue;
           try {
             const json = JSON.parse(line.slice(6));
-            if (json.done) break;
+            if (json.done) {
+              finished = true;
+              break;
+            }
             if (json.error) throw new Error(json.error);
             if (json.token) {
-              if (firstToken) {
-                // First token — add the AI message to the list
-                setMessages((prev) => [
-                  ...prev,
-                  { id: aiMsgId, role: "ai", content: json.token },
-                ]);
-                setStreamingMsgId(aiMsgId);
-                firstToken = false;
-              } else {
-                // Append token to the streaming message
-                setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === aiMsgId ? { ...m, content: m.content + json.token } : m
-                  )
-                );
-              }
+              receivedToken = true;
+              pending += json.token;
+              scheduleFlush();
             }
           } catch (parseErr) {
             if (parseErr.message && !parseErr.message.includes("JSON")) throw parseErr;
           }
         }
       }
+      // Flush whatever is still buffered before finishing
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+      flush();
       // If stream ended but no tokens were received, show an error
-      if (firstToken) {
+      if (!receivedToken) {
         setError("No response received. The server may be overloaded — please try again.");
       }
     } catch (err) {
+      if (controller.signal.aborted) return; // unmounted / session changed — no state updates
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+      flush();
       setError(getUserFriendlyError(err, "Failed to get a response. Please try again."));
     } finally {
-      setIsLoading(false);
-      setStreamingMsgId(null);
+      if (!controller.signal.aborted) {
+        setIsLoading(false);
+        setStreamingMsgId(null);
+      }
+      if (abortRef.current === controller) abortRef.current = null;
     }
   };
 
